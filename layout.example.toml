@@ -1,0 +1,79 @@
+# iTerm2 Layout Configuration
+# Copy to: ~/.config/iterm2/layout-default.toml (or layout-{name}.toml)
+#
+# This file is NOT tracked in git - add your private paths here
+# Documentation: ~/scripts/iterm2/CLAUDE.md
+# First-time setup: Run ~/scripts/iterm2/setup.sh
+# ADR: cc-skills/docs/adr/2025-12-15-iterm2-layout-config.md
+
+# =============================================================================
+# Layout Settings
+# =============================================================================
+
+[layout]
+# Left pane width ratio (0.0 to 1.0)
+# Smaller = narrower left pane (typically for file navigator)
+left_pane_ratio = 0.20
+
+# Wait time after cd command before executing pane command (seconds)
+# Increase if commands execute before directory change completes
+settle_time = 0.3
+
+# =============================================================================
+# Pane Commands
+# =============================================================================
+
+[commands]
+# Command for left pane (narrow, typically file navigator)
+# Safe default: ls -la (works everywhere)
+# Better: br --sort-by-type-dirs-first (requires: brew install broot)
+left = "ls -la"
+
+# Command for right pane (wide, main workspace)
+# Examples:
+#   - "zsh" (default shell, safe fallback)
+#   - "css" (claude-smart-start with auto-resume)
+#   - "claude --continue" (Claude Code with session continue)
+right = "zsh"
+
+# =============================================================================
+# Git Worktree Discovery (Optional)
+# =============================================================================
+
+[worktrees]
+# Enable dynamic worktree tab discovery by setting the root directory
+# Tabs are automatically created for each valid worktree found
+#
+# Example: If alpha_forge_root = "~/projects/my-repo", the script will:
+#   1. Search for directories matching: my-repo.worktree-*
+#   2. Validate each with 'git worktree list'
+#   3. Generate tabs with abbreviated names (e.g., "MR-abc" for my-repo.worktree-2025-01-01-abc)
+#
+# Uncomment to enable:
+# alpha_forge_root = "~/projects/my-repo"
+# worktree_pattern = "my-repo.worktree-*"  # Optional, derived from root if omitted
+
+# =============================================================================
+# Workspace Tabs
+# =============================================================================
+# Each [[tabs]] entry creates a new tab with split panes
+# Required: dir (directory path)
+# Optional: name (defaults to directory basename)
+
+[[tabs]]
+name = "home"
+dir = "~"
+
+[[tabs]]
+name = "projects"
+dir = "~/projects"
+
+# Add more tabs for your workspaces:
+#
+# [[tabs]]
+# name = "my-project"
+# dir = "~/projects/my-project"
+#
+# [[tabs]]
+# name = "config"
+# dir = "~/.config"

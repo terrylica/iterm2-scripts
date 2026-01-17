@@ -1,0 +1,487 @@
+#!/usr/bin/env bash
+# iTerm2 Semantic History handler
+# Opens files in NEW iTerm2 window with Helix
+
+set -euo pipefail
+
+# ============================================================================
+# Helper Functions (DRY)
+# ============================================================================
+
+# Find git root by walking up from a directory
+# Args: $1 = start directory
+# Returns: git root path via stdout (or start dir if not found)
+find_git_root() {
+    local start_dir="$1"
+    local check_dir="$start_dir"
+    while [[ "$check_dir" != "/" ]] && [[ "$check_dir" != "$HOME" ]]; do
+        if [[ -d "$check_dir/.git" ]]; then
+            echo "$check_dir"
+            return 0
+        fi
+        check_dir="$(dirname "$check_dir")"
+    done
+    echo "$start_dir"  # fallback
+}
+
+# Collect workspace roots by walking up and finding markers
+# Args: $1 = start directory
+# Outputs: workspace roots (one per line) via stdout
+collect_workspace_roots() {
+    local start_dir="$1"
+    local check_dir="$start_dir"
+
+    # Always include these
+    echo "$start_dir"
+    echo "$HOME/.claude"
+
+    # Walk up looking for markers
+    while [[ "$check_dir" != "/" ]] && [[ "$check_dir" != "$HOME" ]]; do
+        if [[ -f "$check_dir/CLAUDE.md" ]] || [[ -d "$check_dir/.git" ]]; then
+            echo "$check_dir"
+        fi
+        check_dir="$(dirname "$check_dir")"
+    done
+}
+
+# Deep search for a file using fd
+# Args: $1 = search pattern, $2 = search root
+# Returns: found path via stdout (or empty)
+deep_search_file() {
+    local pattern="$1"
+    local search_root="$2"
+    local filename
+    filename=$(basename "$pattern")
+
+    # Try full path pattern first (-H for hidden dirs, --no-ignore to search gitignored paths)
+    local result
+    result=$(fd -H --no-ignore --type f --full-path "$pattern" "$search_root" 2>/dev/null | head -1)
+
+    if [[ -z "$result" ]]; then
+        # Try just filename
+        result=$(fd -H --no-ignore --type f "^${filename}$" "$search_root" 2>/dev/null | head -1)
+    fi
+
+    echo "$result"
+}
+
+# Strip trailing sentence punctuation (try-with-then-without fallback)
+# Args: $1 = path, $2 = pwd (for resolving relative paths)
+# Returns: cleaned path via stdout
+# Strategy: If original doesn't exist, strip punctuation to help path resolution (fd search)
+strip_trailing_punctuation() {
+    local path="$1"
+    local base_dir="$2"
+    local stripped="$path"
+
+    # Recursively strip trailing sentence punctuation (NOT colon - reserved for line notation)
+    while [[ "$stripped" =~ [.,\;?!]$ ]]; do
+        stripped="${stripped%?}"
+    done
+
+    # If nothing was stripped, return original
+    if [[ "$stripped" == "$path" ]]; then
+        echo "$path"
+        return 0
+    fi
+
+    # Helper to check if path exists (handles relative vs absolute)
+    path_exists() {
+        local p="$1"
+        if [[ "$p" = /* ]]; then
+            [[ -e "$p" ]]
+        else
+            [[ -e "$base_dir/$p" ]] || [[ -e "$p" ]]
+        fi
+    }
+
+    # If original exists, keep it (protects files like "log.2025.txt")
+    if path_exists "$path"; then
+        echo "$path"
+        return 0
+    fi
+
+    # Original doesn't exist - return stripped for path resolution to find
+    echo "$stripped"
+}
+
+# Parse line notation (file:line or file:line:col)
+# Args: $1 = path, $2 = pwd (for resolving relative paths)
+# Returns: 3 lines via stdout: file, line, col (empty if not applicable)
+parse_line_notation() {
+    local path="$1"
+    local base_dir="$2"
+
+    # Helper to check if path exists (handles relative vs absolute)
+    path_exists() {
+        local p="$1"
+        if [[ "$p" = /* ]]; then
+            [[ -e "$p" ]]
+        else
+            [[ -e "$base_dir/$p" ]] || [[ -e "$p" ]]
+        fi
+    }
+
+    # Match file:line or file:line:col patterns
+    if [[ "$path" =~ ^(.+):([0-9]+):?([0-9]*)$ ]]; then
+        local file="${BASH_REMATCH[1]}"
+        local line="${BASH_REMATCH[2]}"
+        local col="${BASH_REMATCH[3]}"
+
+        # Only parse if file part exists
+        if path_exists "$file"; then
+            echo "$file"
+            echo "$line"
+            echo "$col"
+            return 0
+        fi
+    fi
+
+    # No line notation found
+    echo "$path"
+    echo ""
+    echo ""
+}
+
+# ============================================================================
+# Main Script
+# ============================================================================
+
+# Line/column for editor (set after parsing)
+LINE_NUM=""
+COL_NUM=""
+
+pwd_arg="$1"
+file="${2:-}"
+# Additional Semantic History variables (when available)
+text_before="${3:-}"  # \3 = text before click
+text_after="${4:-}"   # \4 = text after click
+
+# Debug logging
+LOG_FILE="/tmp/iterm-open.log"
+echo "$(date): pwd_arg='$pwd_arg' file='$file' before='$text_before' after='$text_after'" >> "$LOG_FILE"
+
+# Handle missing or invalid pwd (iTerm2 passes literal \5 when path not recognized)
+if [[ -z "$pwd_arg" ]] || [[ "$pwd_arg" == '\5' ]] || [[ "$pwd_arg" == '\d' ]] || [[ "$pwd_arg" == '\\'* ]] || [[ "$pwd_arg" == '/' ]]; then
+    # Fall back to HOME (not PWD which might be /)
+    pwd="$HOME"
+    echo "$(date): pwd_arg unsubstituted ('$pwd_arg'), using HOME: $pwd" >> "$LOG_FILE"
+else
+    pwd="$pwd_arg"
+fi
+
+# Handle unsubstituted file parameter (iTerm2 passes literal \1 when path not recognized)
+if [[ -z "$file" ]] || [[ "$file" == '\1' ]] || [[ "$file" == '\0' ]] || [[ "$file" == '\\'* ]]; then
+    echo "$(date): file param unsubstituted ('$file')" >> "$LOG_FILE"
+
+    # Try to extract path from text_before + text_after (\3 + \4)
+    # When clicking on "/docs/decisions/0008-foo.md", iTerm2 provides:
+    #   \3 = text before click position on the line
+    #   \4 = text after click position on the line
+    # We need to find the path that spans the click position
+    extracted_path=""
+
+    if [[ -n "$text_before" ]] || [[ -n "$text_after" ]]; then
+        echo "$(date): Attempting path extraction from context" >> "$LOG_FILE"
+
+        # Combine before+after and extract path-like patterns
+        # Look for patterns like: /path/to/file.md, ./relative/path, ~/home/path
+        combined="${text_before}${text_after}"
+
+        # Try to find a path that spans the click point
+        # The click was between text_before and text_after
+        # Find the path fragment at end of text_before + start of text_after
+
+        # Extract trailing path fragment from text_before (everything after last space/delimiter)
+        before_fragment=""
+        if [[ -n "$text_before" ]]; then
+            # Get characters after last whitespace, (, [, ", ', `, or start of line
+            before_fragment=$(echo "$text_before" | sed -E 's/.*[[:space:]\(\[\"\x27\`]//; s/.*^//')
+        fi
+
+        # Extract leading path fragment from text_after (everything before first space/delimiter)
+        after_fragment=""
+        if [[ -n "$text_after" ]]; then
+            # Get characters before first whitespace, ), ], ", ', `, or end of line
+            after_fragment=$(echo "$text_after" | sed -E 's/[[:space:]\)\]\"\x27\`].*//')
+        fi
+
+        # Combine fragments
+        extracted_path="${before_fragment}${after_fragment}"
+        echo "$(date): before_fragment='$before_fragment' after_fragment='$after_fragment'" >> "$LOG_FILE"
+        echo "$(date): extracted_path='$extracted_path'" >> "$LOG_FILE"
+
+        # Validate extracted path looks like a path (allow /, ~, ., or alphanumeric start)
+        if [[ -n "$extracted_path" ]] && [[ "$extracted_path" =~ ^[~/.]?[a-zA-Z0-9_./-]+$ ]]; then
+            file="$extracted_path"
+            echo "$(date): Using extracted path from context: '$file'" >> "$LOG_FILE"
+        else
+            extracted_path=""
+        fi
+    fi
+
+    # Fallback to clipboard if extraction failed
+    if [[ -z "$extracted_path" ]]; then
+        clipboard=$(pbpaste 2>/dev/null | head -1 | tr -d '\n\r')
+
+        if [[ -n "$clipboard" ]] && [[ "$clipboard" =~ ^[~./]?[a-zA-Z0-9_./-]+\.?[a-zA-Z0-9]*$ ]]; then
+            file="$clipboard"
+            echo "$(date): Using clipboard as file: '$file'" >> "$LOG_FILE"
+        else
+            echo "$(date): Error: iTerm2 couldn't recognize path. Clipboard ('$clipboard') not a valid path." >> "$LOG_FILE"
+            echo "$(date): Tip: Select the path text first, then Cmd+click" >> "$LOG_FILE"
+            exit 1
+        fi
+    fi
+fi
+
+# Strip incorrect URL prefix if iTerm2 added it to relative paths
+# iTerm2 sometimes detects paths with slashes as URLs:
+# - "https://../path"
+# - "http://doc/file.md"
+# - "https://src/main.py"
+if [[ "$file" =~ ^https?:// ]]; then
+    # Check if this looks like a local path mistaken for URL
+    # (no actual domain like "github.com", just path components)
+    url_part="${file#http://}"
+    url_part="${url_part#https://}"
+
+    # If it doesn't contain a dot in the first component (no TLD), it's likely a path
+    # Example: "doc/file.md" vs "github.com/repo"
+    if [[ ! "$url_part" =~ ^[^/]*\.[^/]+ ]]; then
+        file="$url_part"
+        echo "$(date): Stripped incorrect URL prefix from path, now: '$file'" >> "$LOG_FILE"
+    fi
+fi
+
+# Handle literal HOME/ prefix (common when $HOME is rendered in docs without shell expansion)
+if [[ "$file" == HOME/* ]]; then
+    file="${HOME}${file#HOME}"
+    echo "$(date): Expanded literal HOME/ prefix to: $file" >> "$LOG_FILE"
+fi
+
+# ============================================================================
+# Path Enhancement: Strip punctuation and parse line notation
+# ============================================================================
+
+# Step 1: Strip trailing punctuation (try-with-then-without fallback)
+original_file="$file"
+file=$(strip_trailing_punctuation "$file" "$pwd")
+if [[ "$file" != "$original_file" ]]; then
+    echo "$(date): Stripped trailing punctuation: '$original_file' -> '$file'" >> "$LOG_FILE"
+fi
+
+# Step 2: Parse line notation (file:line or file:line:col)
+# First try parsing from the file parameter itself
+parsed_output=$(parse_line_notation "$file" "$pwd")
+file=$(echo "$parsed_output" | sed -n '1p')
+LINE_NUM=$(echo "$parsed_output" | sed -n '2p')
+COL_NUM=$(echo "$parsed_output" | sed -n '3p')
+
+# If no line notation in file param, check text_after (iTerm2 may split at colon)
+# text_after might contain "ate.sh:42" where :42 is the line number
+if [[ -z "$LINE_NUM" ]] && [[ -n "$text_after" ]]; then
+    # Look for :line:col pattern in text_after (may have filename remnants before it)
+    if [[ "$text_after" =~ :([0-9]+):?([0-9]*) ]]; then
+        LINE_NUM="${BASH_REMATCH[1]}"
+        COL_NUM="${BASH_REMATCH[2]}"
+        echo "$(date): Extracted line notation from text_after: line=$LINE_NUM col=$COL_NUM" >> "$LOG_FILE"
+    fi
+fi
+
+if [[ -n "$LINE_NUM" ]]; then
+    echo "$(date): Parsed line notation: file='$file' line=$LINE_NUM col=$COL_NUM" >> "$LOG_FILE"
+fi
+
+# Resolve path based on different formats
+resolved_path=""
+
+if [[ "$file" = /* ]]; then
+    # Path starts with / - could be absolute or root-relative
+    if [[ -e "$file" ]]; then
+        # Actual absolute path exists: /Users/terryli/test.py
+        resolved_path="$file"
+        echo "$(date): Absolute path detected (exists)" >> "$LOG_FILE"
+    elif [[ "$file" =~ ^/(Users|var|tmp|opt|usr|etc|bin|sbin|System|Library|Applications|Volumes)/ ]]; then
+        # Looks like absolute path but doesn't exist
+        resolved_path="$file"
+        echo "$(date): Absolute path detected (doesn't exist yet)" >> "$LOG_FILE"
+    else
+        # Root-relative path: /docs/decisions/...
+        relative_part="${file#/}"
+        echo "$(date): Root-relative path detected: /$relative_part" >> "$LOG_FILE"
+
+        # Try each workspace root (direct path lookup)
+        while IFS= read -r ws_root; do
+            candidate="${ws_root}/${relative_part}"
+            if [[ -e "$candidate" ]]; then
+                resolved_path="$candidate"
+                echo "$(date): Found at workspace root: $ws_root" >> "$LOG_FILE"
+                break
+            fi
+        done < <(collect_workspace_roots "$pwd")
+
+        # If not found, try deep search with fd
+        if [[ -z "$resolved_path" ]]; then
+            echo "$(date): Direct path not found, trying deep search with fd" >> "$LOG_FILE"
+            ws_root=$(find_git_root "$pwd")
+            fd_result=$(deep_search_file "$relative_part" "$ws_root")
+
+            if [[ -n "$fd_result" ]]; then
+                resolved_path="$fd_result"
+                echo "$(date): Found via fd deep search: $resolved_path" >> "$LOG_FILE"
+            else
+                resolved_path="${pwd}/${relative_part}"
+                echo "$(date): Not found anywhere, defaulting to: $resolved_path" >> "$LOG_FILE"
+            fi
+        fi
+    fi
+
+elif [[ "$file" = ~* ]]; then
+    # Home path: ~/test.py
+    resolved_path="${file/#\~/$HOME}"
+    echo "$(date): Home path detected, expanded to $resolved_path" >> "$LOG_FILE"
+
+elif [[ "$file" = ./* ]] || [[ "$file" = ../* ]]; then
+    # Relative path with ./ or ../
+    resolved_path="${pwd}/${file}"
+    echo "$(date): Relative path (./ or ../) detected" >> "$LOG_FILE"
+
+    # If not found, try deep search with fd
+    if [[ ! -e "$resolved_path" ]]; then
+        echo "$(date): Relative path not found, trying deep search" >> "$LOG_FILE"
+        ws_root=$(find_git_root "$pwd")
+        fd_result=$(deep_search_file "$file" "$ws_root")
+
+        if [[ -n "$fd_result" ]]; then
+            resolved_path="$fd_result"
+            echo "$(date): Found via fd deep search: $resolved_path" >> "$LOG_FILE"
+        fi
+    fi
+
+else
+    # Plain filename or relative path: test.py or src/main.py or skills/semantic-release/...
+    echo "$(date): Bare relative path detected: $file" >> "$LOG_FILE"
+
+    # Try as-is first
+    if [[ -e "$file" ]]; then
+        resolved_path="$file"
+        echo "$(date): File exists as-is" >> "$LOG_FILE"
+    else
+        # Try each workspace root (direct path lookup)
+        while IFS= read -r ws_root; do
+            candidate="${ws_root}/${file}"
+            if [[ -e "$candidate" ]]; then
+                resolved_path="$candidate"
+                echo "$(date): Found bare relative path at: $ws_root" >> "$LOG_FILE"
+                break
+            fi
+        done < <(collect_workspace_roots "$pwd")
+
+        # Also try ~/eon/ subdirectories
+        if [[ -z "$resolved_path" ]] && [[ -d "$HOME/eon" ]]; then
+            for eon_dir in "$HOME/eon"/*; do
+                if [[ -d "$eon_dir" ]]; then
+                    candidate="${eon_dir}/${file}"
+                    if [[ -e "$candidate" ]]; then
+                        resolved_path="$candidate"
+                        echo "$(date): Found in ~/eon/: $eon_dir" >> "$LOG_FILE"
+                        break
+                    fi
+                fi
+            done
+        fi
+
+        # If not found, try deep search with fd
+        if [[ -z "$resolved_path" ]]; then
+            echo "$(date): Direct path not found, trying deep search with fd" >> "$LOG_FILE"
+            ws_root=$(find_git_root "$pwd")
+            fd_result=$(deep_search_file "$file" "$ws_root")
+
+            if [[ -n "$fd_result" ]]; then
+                resolved_path="$fd_result"
+                echo "$(date): Found via fd deep search: $resolved_path" >> "$LOG_FILE"
+            else
+                resolved_path="${pwd}/${file}"
+                echo "$(date): Not found anywhere, defaulting to: $resolved_path" >> "$LOG_FILE"
+            fi
+        fi
+    fi
+fi
+
+# Normalize the path (resolve . and ..)
+if [[ -e "$resolved_path" ]]; then
+    # Use realpath to get canonical absolute path
+    resolved_path="$(cd "$(dirname "$resolved_path")" && pwd)/$(basename "$resolved_path")"
+    echo "$(date): Normalized to: $resolved_path" >> "$LOG_FILE"
+else
+    echo "$(date): Warning: Path doesn't exist yet: $resolved_path" >> "$LOG_FILE"
+fi
+
+echo "$(date): Final resolved path: $resolved_path" >> "$LOG_FILE"
+
+# Handle directories
+if [[ -d "$resolved_path" ]]; then
+    echo "$(date): Opening directory in Finder" >> "$LOG_FILE"
+    open "$resolved_path"
+    exit 0
+fi
+
+# Handle specific file types
+case "$resolved_path" in
+    *.pdf)
+        echo "$(date): Opening PDF with Skim" >> "$LOG_FILE"
+        open -a Skim "$resolved_path"
+        exit 0
+        ;;
+    *.png|*.jpg|*.jpeg|*.gif|*.bmp|*.ico|*.svg)
+        echo "$(date): Opening image with default app" >> "$LOG_FILE"
+        open "$resolved_path"
+        exit 0
+        ;;
+    *.duckdb)
+        echo "$(date): Opening DuckDB file in browser UI" >> "$LOG_FILE"
+
+        # Launch DuckDB UI via wrapper script (keeps process alive)
+        LOG_FILE_DUCKDB="/tmp/duckdb-ui-$$.log"
+        /Users/terryli/.local/bin/duckdb-ui-launcher "$resolved_path" "$LOG_FILE_DUCKDB" &
+        disown
+
+        # Wait for URL to appear and open browser
+        for i in {1..10}; do
+            if [ -f "$LOG_FILE_DUCKDB" ]; then
+                URL=$(grep -oE 'http://localhost:[0-9]+/' "$LOG_FILE_DUCKDB" 2>/dev/null || echo "")
+                if [ -n "$URL" ]; then
+                    # Wait for DuckDB UI to be fully ready before opening browser
+                    sleep 2
+                    open "$URL"
+                    echo "$(date): Browser opened to $URL" >> "$LOG_FILE"
+                    # Wait longer for browser to connect (DuckDB exits if no connections)
+                    # Browser needs time to launch and establish connection
+                    sleep 8
+                    break
+                fi
+            fi
+            sleep 0.5
+        done
+
+        exit 0
+        ;;
+    *.html|*.htm)
+        echo "$(date): Opening HTML file in default browser" >> "$LOG_FILE"
+        open "$resolved_path"
+        exit 0
+        ;;
+esac
+
+# All text files: open in NEW iTerm2 window with Helix
+if [[ -n "$LINE_NUM" ]]; then
+    echo "$(date): Opening in new iTerm2 window with Helix at line $LINE_NUM${COL_NUM:+:$COL_NUM}" >> "$LOG_FILE"
+else
+    echo "$(date): Opening in new iTerm2 window with Helix" >> "$LOG_FILE"
+fi
+/Users/terryli/.local/bin/open-in-helix "$resolved_path" "$LINE_NUM" "$COL_NUM"
+
+RESULT=$?
+echo "$(date): Completed with exit code: $RESULT" >> "$LOG_FILE"
+exit $RESULT

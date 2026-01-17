@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# TextHelix.app URL handler - converts file:// URLs to paths
+# Delegates to open-in-helix for actual iTerm2/Helix integration
+#
+# ADR: 2025-12-12-texthelix-git-externalization
+
+set -euo pipefail
+
+# Resolve symlink to get actual script directory (not symlink location)
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+FILE_PATH="$1"
+
+# Strip file:// URL scheme (OSC 8 hyperlinks pass file:// URLs)
+if [[ "$FILE_PATH" == file://* ]]; then
+    FILE_PATH="${FILE_PATH#file://}"
+    # URL decode percent-encoded characters (e.g., %20 for space)
+    FILE_PATH=$(printf '%b' "${FILE_PATH//%/\\x}")
+fi
+
+# Delegate to existing open-in-helix script
+exec "$SCRIPT_DIR/open-in-helix" "$FILE_PATH"

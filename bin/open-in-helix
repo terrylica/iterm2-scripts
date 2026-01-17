@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Open file in Helix in a NEW iTerm2 window
+# Usage: open-in-helix <file> [line] [column]
+
+set -euo pipefail
+
+# Log file for debugging
+LOG_FILE="/tmp/markdown-helix-opener.log"
+echo "$(date): Called with args: $@" >> "$LOG_FILE"
+echo "$(date): Called from: ${PPID} (parent process)" >> "$LOG_FILE"
+echo "$(date): PWD: $PWD" >> "$LOG_FILE"
+
+FILE_PATH="$1"
+LINE="${2:-}"
+COL="${3:-}"
+
+# Get absolute path
+if [[ ! "$FILE_PATH" = /* ]]; then
+    FILE_PATH="$(pwd)/$FILE_PATH"
+fi
+
+echo "$(date): Resolved path: $FILE_PATH" >> "$LOG_FILE"
+
+# Verify file exists
+if [[ ! -f "$FILE_PATH" ]]; then
+    echo "$(date): Error: File not found: $FILE_PATH" >> "$LOG_FILE"
+    echo "Error: File not found: $FILE_PATH" >&2
+    exit 1
+fi
+
+# Construct Helix command with optional line:col notation
+# Use single quotes to avoid AppleScript parsing issues with colons
+if [[ -n "$LINE" && -n "$COL" ]]; then
+    HX_CMD="hx '$FILE_PATH:$LINE:$COL'"
+    echo "$(date): Opening at line $LINE, column $COL" >> "$LOG_FILE"
+elif [[ -n "$LINE" ]]; then
+    HX_CMD="hx '$FILE_PATH:$LINE'"
+    echo "$(date): Opening at line $LINE" >> "$LOG_FILE"
+else
+    HX_CMD="hx '$FILE_PATH'"
+fi
+
+# Open new iTerm2 window with Helix
+echo "$(date): Executing osascript with: $HX_CMD" >> "$LOG_FILE"
+osascript <<EOF 2>> "$LOG_FILE"
+tell application "iTerm"
+    activate
+
+    -- Create a new window with default profile (uses profile's window size)
+    create window with default profile
+
+    -- Get the current session in the new window
+    tell current session of current window
+        -- Open the file in Helix
+        write text "$HX_CMD"
+    end tell
+end tell
+EOF
+
+RESULT=$?
+echo "$(date): osascript exit code: $RESULT" >> "$LOG_FILE"
+exit $RESULT

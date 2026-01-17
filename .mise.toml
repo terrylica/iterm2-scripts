@@ -1,0 +1,17 @@
+# SSoT-OK: Tool versions
+[env]
+GH_TOKEN = "{{ read_file(path=env.HOME ~ '/.claude/.secrets/gh-token-terrylica') | trim }}"
+GITHUB_TOKEN = "{{ read_file(path=env.HOME ~ '/.claude/.secrets/gh-token-terrylica') | trim }}"
+GH_ACCOUNT = "terrylica"
+
+[tools]
+python = "3.11"
+uv = "latest"
+
+[tasks.setup]
+description = "Run setup script"
+run = "bash setup.sh"
+
+[tasks.test-aliases]
+description = "Test shell alias introspection"
+run = "python3 -c \"import subprocess; print(subprocess.run(['zsh', '-ic', 'alias -L'], capture_output=True, text=True, timeout=2).stdout[:500])\""

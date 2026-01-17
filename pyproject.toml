@@ -1,0 +1,28 @@
+# SSoT-OK: Initial version
+[project]
+name = "iterm2-scripts"
+version = "0.1.0"
+description = "iTerm2 workspace automation with split panes"
+authors = [{name = "Terry Li"}]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+dependencies = [
+    "iterm2>=2.7",
+    "pyobjc>=10.0",
+    "loguru>=0.7",
+    "platformdirs>=4.0",
+]
+
+[project.optional-dependencies]
+dev = ["ruff", "mypy"]
+
+[project.scripts]
+iterm2-layout-manager = "iterm2_scripts.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/iterm2_scripts"]
