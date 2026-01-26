@@ -1,8 +1,5 @@
 # SSoT-OK: Tool versions
-[env]
-GH_TOKEN = "{{ read_file(path=env.HOME ~ '/.claude/.secrets/gh-token-terrylica') | trim }}"
-GITHUB_TOKEN = "{{ read_file(path=env.HOME ~ '/.claude/.secrets/gh-token-terrylica') | trim }}"
-GH_ACCOUNT = "terrylica"
+# Note: Set GH_TOKEN/GITHUB_TOKEN in .mise.local.toml (gitignored) for releases
 
 [tools]
 python = "3.11"

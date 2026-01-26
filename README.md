@@ -25,8 +25,8 @@ uv run https://raw.githubusercontent.com/terrylica/iterm2-scripts/main/default-l
 ### Option 3: Git Clone
 
 ```bash
-git clone https://github.com/terrylica/iterm2-scripts ~/eon/iterm2-scripts
-bash ~/eon/iterm2-scripts/setup.sh
+git clone https://github.com/terrylica/iterm2-scripts
+cd iterm2-scripts && bash setup.sh
 ```
 
 ## Setup

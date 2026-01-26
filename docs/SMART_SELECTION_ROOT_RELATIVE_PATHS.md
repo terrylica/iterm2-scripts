@@ -40,9 +40,11 @@ The improved regex uses a **layered matching strategy**:
 4. Click **"Actions (1)..."** button
 5. Verify **"Use interpolated strings for parameters"** checkbox is **checked**
 6. Set Command to:
+
    ```
-   /Users/terryli/.local/bin/iterm-open "\(path)" "\(matches[0])"
+   ~/.local/bin/iterm-open "\(path)" "\(matches[0])"
    ```
+
 7. Click **Ok** → **Close**
 
 ### Critical: Syntax Must Match Checkbox State
@@ -74,7 +76,7 @@ The improved regex uses a **layered matching strategy**:
 
 ## How iterm-open Resolves Paths
 
-The `iterm-open` script (`~/scripts/iterm2/bin/iterm-open`) handles path resolution:
+The `iterm-open` script handles path resolution:
 
 1. **Absolute paths** (`/Users/...`): Used as-is
 2. **Root-relative paths** (`/docs/...`): Tries multiple workspace roots:
@@ -165,8 +167,6 @@ log.2025.txt               # Keep (file exists with periods)
 
 ## Reference
 
-- **Script**: `~/scripts/iterm2/bin/iterm-open`
+- **Script**: `bin/iterm-open` (symlink to `~/.local/bin/iterm-open`)
 - **Helix opener**: `~/.local/bin/open-in-helix` (accepts line/column args)
-- **Symlink**: `~/.local/bin/iterm-open` → above
-- **ADR**: [Punctuation + Line Numbers](/docs/adr/2025-12-05-iterm-punctuation-line-notation.md)
-- **iTerm2 Docs**: https://iterm2.com/documentation-smart-selection.html
+- **iTerm2 Docs**: <https://iterm2.com/documentation-smart-selection.html>

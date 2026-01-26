@@ -15,9 +15,7 @@ How it works:
 3. Kills orphaned processes to reclaim memory
 
 Installation:
-1. Symlink to AutoLaunch:
-   ln -s ~/scripts/iterm2/claude-orphan-cleanup.py \
-   "$HOME/Library/Application Support/iTerm2/Scripts/AutoLaunch/"
+1. Run setup.sh to create symlinks to AutoLaunch
 2. Restart iTerm2 (or run from Scripts menu)
 
 Requirements:

@@ -49,3 +49,4 @@ htmlcov/
 
 # Node.js (semantic-release)
 node_modules/
+.mise.local.toml

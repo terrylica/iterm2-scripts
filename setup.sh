@@ -4,7 +4,7 @@
 # =============================================================================
 #
 # This script sets up the iTerm2 Layout Manager for a new user.
-# Run: bash ~/eon/iterm2-scripts/setup.sh
+# Run: bash setup.sh (from the cloned repository)
 #
 # What it does:
 # 1. Validates Python 3.11+ is installed

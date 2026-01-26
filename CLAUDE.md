@@ -20,8 +20,8 @@ iTerm2 workspace automation using the official Python API.
 
 ```bash
 # Clone and setup
-git clone https://github.com/terrylica/iterm2-scripts ~/eon/iterm2-scripts
-bash ~/eon/iterm2-scripts/setup.sh
+git clone https://github.com/terrylica/iterm2-scripts
+cd iterm2-scripts && bash setup.sh
 
 # Enable Python API in iTerm2
 # iTerm2 → Settings → General → Magic → Enable Python API
@@ -35,7 +35,7 @@ bash ~/eon/iterm2-scripts/setup.sh
 
 **Reverse symlink pattern**: Git repo → AutoLaunch directory symlink
 
-- Real file: `~/eon/iterm2-scripts/default-layout.py`
+- Real file: `<clone-path>/default-layout.py`
 - Symlink: `~/Library/Application Support/iTerm2/Scripts/AutoLaunch/default-layout.py`
 
 **Configuration**: `~/.config/iterm2/layout-*.toml` (XDG standard, chezmoi-tracked)
@@ -87,5 +87,3 @@ python3 -c "import subprocess; print(subprocess.run(['zsh', '-ic', 'alias -L'], 
 ---
 
 _Claude Code Agent Memory - iTerm2 Automation_
-_Location: ~/eon/iterm2-scripts/_
-_Architecture: Hub-and-Spoke with Progressive Disclosure_

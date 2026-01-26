@@ -2,9 +2,8 @@
 # Copy to: ~/.config/iterm2/layout-default.toml (or layout-{name}.toml)
 #
 # This file is NOT tracked in git - add your private paths here
-# Documentation: ~/scripts/iterm2/CLAUDE.md
-# First-time setup: Run ~/scripts/iterm2/setup.sh
-# ADR: cc-skills/docs/adr/2025-12-15-iterm2-layout-config.md
+# Documentation: docs/CLAUDE.md
+# First-time setup: Run setup.sh
 
 # =============================================================================
 # Layout Settings
