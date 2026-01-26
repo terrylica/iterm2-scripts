@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Add word to harper-ls user dictionary
+# Usage: add-to-dict <word>
+
+set -euo pipefail
+
+DICT_DIR="$HOME/Library/Application Support/harper-ls"
+DICT_FILE="$DICT_DIR/dictionary.txt"
+
+if [ $# -eq 0 ]; then
+    echo "Usage: add-to-dict <word>"
+    echo "Example: add-to-dict iPhone"
+    exit 1
+fi
+
+WORD="$1"
+
+# Create directory if it doesn't exist
+mkdir -p "$DICT_DIR"
+
+# Create file if it doesn't exist
+touch "$DICT_FILE"
+
+# Check if word already exists
+if grep -qx "$WORD" "$DICT_FILE" 2>/dev/null; then
+    echo "✓ '$WORD' already in dictionary"
+    exit 0
+fi
+
+# Add word
+echo "$WORD" >> "$DICT_FILE"
+echo "✅ Added '$WORD' to user dictionary"
+echo "📝 Dictionary: $DICT_FILE"
+
+# Sort dictionary (optional, keeps it organized)
+sort -u "$DICT_FILE" -o "$DICT_FILE"

@@ -1,0 +1,16 @@
+#compdef iterm2-layout
+
+_iterm2_layout() {
+  local -a commands
+  commands=(
+    'setup:Create AutoLaunch symlink and copy example config'
+    'validate:Validate TOML layout configuration'
+    'list:List available layout configurations'
+    'show:Show currently active layout'
+    'version:Show version information'
+  )
+
+  _describe 'command' commands
+}
+
+_iterm2_layout

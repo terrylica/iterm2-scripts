@@ -15,3 +15,19 @@ run = "bash setup.sh"
 [tasks.test-aliases]
 description = "Test shell alias introspection"
 run = "python3 -c \"import subprocess; print(subprocess.run(['zsh', '-ic', 'alias -L'], capture_output=True, text=True, timeout=2).stdout[:500])\""
+
+[tasks.build]
+description = "Build default-layout.py from src/ modules"
+run = "python build.py"
+
+[tasks.build-check]
+description = "Verify built output matches source modules"
+run = "python build.py --check"
+
+[tasks.release]
+description = "Run semantic-release (dry-run)"
+run = "/usr/bin/env bash -c 'npx semantic-release --dry-run'"
+
+[tasks."release:full"]
+description = "Run semantic-release (actual release)"
+run = "/usr/bin/env bash -c 'npx semantic-release --no-ci'"

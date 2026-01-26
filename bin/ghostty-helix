@@ -1,0 +1,3 @@
+#!/bin/bash
+# Open file in new Ghostty tab with Helix
+open -na Ghostty.app --args -e hx "$1"

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Native macOS folder picker using osascript
+# Returns selected folder path to stdout, or exits with code 1 if cancelled
+
+set -euo pipefail
+
+PROMPT="${1:-Select a folder:}"
+
+result=$(osascript -e "POSIX path of (choose folder with prompt \"$PROMPT\")" 2>/dev/null) || exit 1
+
+# Remove trailing slash and output
+echo "${result%/}"

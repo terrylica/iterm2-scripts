@@ -46,3 +46,6 @@ htmlcov/
 
 # Lychee
 .lycheecache
+
+# Node.js (semantic-release)
+node_modules/

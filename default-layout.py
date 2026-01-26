@@ -145,6 +145,14 @@ except ImportError as e:
 
 
 # =============================================================================
+# Module: logging_setup.py
+# =============================================================================
+
+# ruff: noqa: F821
+# ADR: docs/adr/2026-01-26-modular-source-concatenation.md
+# This module is concatenated with _header.py - imports come from there
+
+# =============================================================================
 # Structured Logging Setup (JSONL format)
 # =============================================================================
 
@@ -216,6 +224,13 @@ def setup_logger():
 
     return logger
 
+# =============================================================================
+# Module: result.py
+# =============================================================================
+
+# ruff: noqa: F821
+# ADR: docs/adr/2026-01-26-modular-source-concatenation.md
+# This module is concatenated with _header.py - imports come from there
 
 # =============================================================================
 # Error Handling Types (Result + ErrorReport)
@@ -308,6 +323,13 @@ class ErrorReport:
             }
         )
 
+# =============================================================================
+# Module: config.py
+# =============================================================================
+
+# ruff: noqa: F821
+# ADR: docs/adr/2026-01-26-modular-source-concatenation.md
+# This module is concatenated with _header.py - imports come from there
 
 # =============================================================================
 # Configuration Loading
@@ -351,8 +373,101 @@ DEFAULT_CONFIG = {
 SAFE_LEFT_COMMAND = "ls -la"
 SAFE_RIGHT_COMMAND = "zsh"
 
-# Common shell aliases mapped to their actual binaries
-# Used by validate_command to check if aliased commands will work
+# =============================================================================
+# Shell Alias Introspection
+# =============================================================================
+# ADR: docs/adr/2026-01-17-shell-alias-resolution.md
+# Query zsh for aliases at runtime, with fallback to hardcoded known aliases.
+
+
+def get_shell_aliases() -> dict[str, str]:
+    """
+    Query zsh for defined aliases at runtime.
+
+    Returns:
+        dict mapping alias names to their targets
+        e.g., {"br": "broot", "hx": "helix"}
+    """
+    try:
+        result = subprocess.run(
+            ["zsh", "-ic", "alias -L"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,  # Graceful degradation: non-zero exit returns empty aliases
+            env={**os.environ, "TERM": "dumb"}  # Suppress terminal escape codes
+        )
+        if result.returncode != 0:
+            return {}
+        return _parse_alias_output(result.stdout)
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return {}
+
+
+def _parse_alias_output(output: str) -> dict[str, str]:
+    """
+    Parse `alias -L` output into a dict.
+
+    Example input:
+        alias br='broot --sort-by-type-dirs-first'
+        alias hx=helix
+        alias lg='lazygit'
+
+    Returns:
+        {"br": "broot", "hx": "helix", "lg": "lazygit"}
+    """
+    aliases = {}
+    # Pattern: alias name='command args' or alias name=command
+    pattern = re.compile(r"^alias\s+(\w+)=['\"]?(\S+)")
+
+    for line in output.strip().split("\n"):
+        if not line.strip():
+            continue
+        match = pattern.match(line)
+        if match:
+            alias_name = match.group(1)
+            # Extract just the command name (first word)
+            target = match.group(2).split()[0].rstrip("'\"")
+            aliases[alias_name] = target
+
+    return aliases
+
+
+class CommandResolver:
+    """Resolve commands with alias and PATH lookup."""
+
+    _cached_aliases: dict[str, str] | None = None
+
+    @classmethod
+    def get_aliases(cls) -> dict[str, str]:
+        """Get shell aliases, caching result for session."""
+        if cls._cached_aliases is None:
+            cls._cached_aliases = get_shell_aliases()
+            if cls._cached_aliases:
+                logger.debug(
+                    "Shell aliases discovered",
+                    operation="get_aliases",
+                    status="success",
+                    count=len(cls._cached_aliases)
+                )
+            else:
+                logger.debug(
+                    "No shell aliases discovered, using fallback",
+                    operation="get_aliases",
+                    status="fallback"
+                )
+        return cls._cached_aliases
+
+    @classmethod
+    def resolve(cls, cmd: str) -> str | None:
+        """Resolve command through aliases and PATH."""
+        aliases = cls.get_aliases()
+        resolved = aliases.get(cmd, cmd)
+        return shutil.which(resolved)
+
+
+# Fallback aliases when runtime shell query fails
+# Used only if CommandResolver.get_aliases() returns empty
 KNOWN_ALIASES = {
     "br": "broot",      # broot file navigator
     "ll": "ls",         # common ls alias
@@ -367,9 +482,11 @@ def validate_command(command: str, fallback: str) -> str:
     """
     Validate that a command exists, falling back to safe default if not.
 
-    Checks if the first word of the command (the binary) exists in PATH.
-    Also handles common shell aliases (e.g., 'br' -> 'broot').
-    If not found, logs a warning and returns the fallback command.
+    Resolution order:
+    1. Check if binary exists directly in PATH
+    2. Try runtime shell alias resolution via CommandResolver
+    3. Fall back to hardcoded KNOWN_ALIASES
+    4. If all fail, use fallback command
 
     Args:
         command: The command to validate (e.g., "br --sort-by-type-dirs-first")
@@ -392,15 +509,30 @@ def validate_command(command: str, fallback: str) -> str:
     if shutil.which(binary):
         return command
 
-    # Check if it's a known alias and the actual binary exists
+    # Try runtime shell alias resolution (queries zsh, cached for session)
+    runtime_aliases = CommandResolver.get_aliases()
+    if binary in runtime_aliases:
+        actual_binary = runtime_aliases[binary]
+        if shutil.which(actual_binary):
+            logger.debug(
+                "Using runtime shell alias",
+                operation="validate_command",
+                alias=binary,
+                actual_binary=actual_binary,
+                source="zsh"
+            )
+            return command  # Keep original command - shell will resolve alias
+
+    # Fall back to hardcoded aliases if runtime query returned empty
     if binary in KNOWN_ALIASES:
         actual_binary = KNOWN_ALIASES[binary]
         if shutil.which(actual_binary):
             logger.debug(
-                "Using known alias",
+                "Using fallback known alias",
                 operation="validate_command",
                 alias=binary,
-                actual_binary=actual_binary
+                actual_binary=actual_binary,
+                source="KNOWN_ALIASES"
             )
             return command  # Keep original command - shell will resolve alias
 
@@ -570,6 +702,13 @@ def load_config_from_path(config_path: Path) -> Result[dict]:
             original_exception=e
         ))
 
+# =============================================================================
+# Module: preferences.py
+# =============================================================================
+
+# ruff: noqa: F821
+# ADR: docs/adr/2026-01-26-modular-source-concatenation.md
+# This module is concatenated with _header.py - imports come from there
 
 # =============================================================================
 # Layout Selector Functions
@@ -943,6 +1082,13 @@ async def reset_preferences(connection, window) -> bool:
         await error_alert.async_run(connection)
         return False
 
+# =============================================================================
+# Module: discovery.py
+# =============================================================================
+
+# ruff: noqa: F821
+# ADR: docs/adr/2026-01-26-modular-source-concatenation.md
+# This module is concatenated with _header.py - imports come from there
 
 # =============================================================================
 # First-Run Detection and Wizard
@@ -1867,6 +2013,13 @@ def discover_all_worktrees(git_repos: list[dict]) -> list[dict]:
 
     return unique_worktrees
 
+# =============================================================================
+# Module: dialogs.py
+# =============================================================================
+
+# ruff: noqa: F821
+# ADR: docs/adr/2026-01-26-modular-source-concatenation.md
+# This module is concatenated with _header.py - imports come from there
 
 # =============================================================================
 # Layer 2: Tab Customization Functions
@@ -2099,7 +2252,8 @@ def show_tab_customization_swiftdialog(
     layout_tabs: list[dict],
     worktrees: list[dict],
     additional_repos: list[dict],
-    untracked_folders: list[dict] | None = None
+    untracked_folders: list[dict] | None = None,
+    last_tab_selections: list[str] | None = None
 ) -> list[dict] | None:
     """
     Show Layer 2 checkbox dialog using SwiftDialog (modern macOS UI).
@@ -2108,10 +2262,11 @@ def show_tab_customization_swiftdialog(
     category headers, and JSON output. Much better UX for 50+ items.
 
     Args:
-        layout_tabs: Tabs from layout config (pre-checked)
-        worktrees: Discovered worktrees (pre-checked)
-        additional_repos: Git repos not in layout (unchecked)
-        untracked_folders: Directories without .git (unchecked)
+        layout_tabs: Tabs from layout config
+        worktrees: Discovered worktrees
+        additional_repos: Git repos not in layout
+        untracked_folders: Directories without .git
+        last_tab_selections: Previously selected tab names (for restoring state)
 
     Returns:
         List of selected tabs, or None if cancelled
@@ -2143,7 +2298,20 @@ def show_tab_customization_swiftdialog(
     checkboxes = []
     all_items = []  # Maps labels to tab dicts
 
-    # Category: Layout Tabs (pre-checked)
+    # Convert last_tab_selections to a set for O(1) lookup
+    # Also include dir paths for matching (handles tabs without names)
+    remembered_selections = set(last_tab_selections) if last_tab_selections else None
+
+    def is_tab_selected(tab: dict, category: str) -> bool:
+        """Determine if a tab should be pre-checked."""
+        if remembered_selections is None:
+            # No remembered selections - use category defaults
+            return category in ("layout", "worktree")
+        # Check if tab name or dir is in remembered selections
+        name = tab.get("name", os.path.basename(tab["dir"]))
+        return name in remembered_selections or tab.get("dir") in remembered_selections
+
+    # Category: Layout Tabs
     if layout_tabs:
         checkboxes.append({
             "label": "—— Layout Tabs ——",
@@ -2154,11 +2322,11 @@ def show_tab_customization_swiftdialog(
             label = f"{tab.get('name', os.path.basename(tab['dir']))}"
             checkboxes.append({
                 "label": label,
-                "checked": True
+                "checked": is_tab_selected(tab, "layout")
             })
             all_items.append({"label": label, "tab": tab, "category": "layout"})
 
-    # Category: Worktrees (pre-checked)
+    # Category: Worktrees
     if worktrees:
         checkboxes.append({
             "label": "—— Git Worktrees ——",
@@ -2169,11 +2337,11 @@ def show_tab_customization_swiftdialog(
             label = f"{wt['name']}"
             checkboxes.append({
                 "label": label,
-                "checked": True
+                "checked": is_tab_selected(wt, "worktree")
             })
             all_items.append({"label": label, "tab": wt, "category": "worktree"})
 
-    # Category: Additional Repos (unchecked)
+    # Category: Additional Repos
     if additional_repos:
         checkboxes.append({
             "label": "—— Additional Repos ——",
@@ -2184,11 +2352,11 @@ def show_tab_customization_swiftdialog(
             label = f"{repo['name']}"
             checkboxes.append({
                 "label": label,
-                "checked": False
+                "checked": is_tab_selected(repo, "discovered")
             })
             all_items.append({"label": label, "tab": repo, "category": "discovered"})
 
-    # Category: Untracked Folders (unchecked) - directories without .git
+    # Category: Untracked Folders - directories without .git
     if untracked_folders:
         checkboxes.append({
             "label": "—— Untracked Folders ——",
@@ -2199,7 +2367,7 @@ def show_tab_customization_swiftdialog(
             label = f"{folder['name']}"
             checkboxes.append({
                 "label": label,
-                "checked": False
+                "checked": is_tab_selected(folder, "untracked")
             })
             all_items.append({"label": label, "tab": folder, "category": "untracked"})
 
@@ -2367,7 +2535,8 @@ async def show_tab_customization_polymodal(
     layout_tabs: list[dict],
     worktrees: list[dict],
     additional_repos: list[dict],
-    untracked_folders: list[dict] | None = None
+    untracked_folders: list[dict] | None = None,
+    last_tab_selections: list[str] | None = None
 ) -> list[dict] | None:
     """
     Show Layer 2 checkbox dialog using iTerm2 PolyModalAlert (fallback).
@@ -2377,10 +2546,11 @@ async def show_tab_customization_polymodal(
 
     Args:
         connection: iTerm2 connection
-        layout_tabs: Tabs from layout config (pre-checked)
-        worktrees: Discovered worktrees (pre-checked)
-        additional_repos: Git repos not in layout (unchecked)
-        untracked_folders: Directories without .git (unchecked)
+        layout_tabs: Tabs from layout config
+        worktrees: Discovered worktrees
+        additional_repos: Git repos not in layout
+        untracked_folders: Directories without .git
+        last_tab_selections: Previously selected tab names (for restoring state)
 
     Returns:
         List of selected tabs, or None if cancelled
@@ -2411,28 +2581,40 @@ async def show_tab_customization_polymodal(
     # Build checkbox items with labels
     all_items = []
 
-    # Layout tabs (pre-checked)
+    # Convert last_tab_selections to a set for O(1) lookup
+    remembered_selections = set(last_tab_selections) if last_tab_selections else None
+
+    def is_tab_selected(tab: dict, category: str) -> int:
+        """Determine if a tab should be pre-checked (returns 1 or 0)."""
+        if remembered_selections is None:
+            # No remembered selections - use category defaults
+            return 1 if category in ("layout", "worktree") else 0
+        # Check if tab name or dir is in remembered selections
+        name = tab.get("name", os.path.basename(tab["dir"]))
+        return 1 if (name in remembered_selections or tab.get("dir") in remembered_selections) else 0
+
+    # Layout tabs
     for tab in layout_tabs:
         label = f"{tab.get('name', tab['dir'])} ({tab['dir']})"
-        alert.add_checkbox_item(label, 1)
+        alert.add_checkbox_item(label, is_tab_selected(tab, "layout"))
         all_items.append({"label": label, "tab": tab, "category": "layout"})
 
-    # Worktrees (pre-checked)
+    # Worktrees
     for wt in worktrees:
         label = f"{wt['name']} ({wt['dir']})"
-        alert.add_checkbox_item(label, 1)
+        alert.add_checkbox_item(label, is_tab_selected(wt, "worktree"))
         all_items.append({"label": label, "tab": wt, "category": "worktree"})
 
-    # Additional repos (unchecked)
+    # Additional repos
     for repo in additional_repos:
         label = f"{repo['name']} ({repo['dir']})"
-        alert.add_checkbox_item(label, 0)
+        alert.add_checkbox_item(label, is_tab_selected(repo, "discovered"))
         all_items.append({"label": label, "tab": repo, "category": "discovered"})
 
-    # Untracked folders (unchecked)
+    # Untracked folders
     for folder in untracked_folders:
         label = f"{folder['name']} ({folder['dir']})"
-        alert.add_checkbox_item(label, 0)
+        alert.add_checkbox_item(label, is_tab_selected(folder, "untracked"))
         all_items.append({"label": label, "tab": folder, "category": "untracked"})
 
     # Add buttons
@@ -2485,7 +2667,8 @@ async def show_tab_customization(
     layout_tabs: list[dict],
     worktrees: list[dict],
     additional_repos: list[dict],
-    untracked_folders: list[dict] | None = None
+    untracked_folders: list[dict] | None = None,
+    last_tab_selections: list[str] | None = None
 ) -> list[dict] | None:
     """
     Show Layer 2 checkbox dialog for tab customization.
@@ -2495,10 +2678,11 @@ async def show_tab_customization(
 
     Args:
         connection: iTerm2 connection
-        layout_tabs: Tabs from layout config (pre-checked)
-        worktrees: Discovered worktrees (pre-checked)
-        additional_repos: Git repos not in layout (unchecked)
-        untracked_folders: Directories without .git (unchecked)
+        layout_tabs: Tabs from layout config
+        worktrees: Discovered worktrees
+        additional_repos: Git repos not in layout
+        untracked_folders: Directories without .git
+        last_tab_selections: Previously selected tab names (for restoring state)
 
     Returns:
         List of selected tabs, or None if cancelled
@@ -2513,7 +2697,6 @@ async def show_tab_customization(
             operation="show_tab_customization"
         )
         # SwiftDialog is synchronous (subprocess), run in executor
-        import asyncio
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,
@@ -2521,7 +2704,8 @@ async def show_tab_customization(
             layout_tabs,
             worktrees,
             additional_repos,
-            untracked_folders
+            untracked_folders,
+            last_tab_selections
         )
         return result
     else:
@@ -2534,7 +2718,8 @@ async def show_tab_customization(
             layout_tabs,
             worktrees,
             additional_repos,
-            untracked_folders
+            untracked_folders,
+            last_tab_selections
         )
 
 
@@ -2864,6 +3049,13 @@ async def show_directory_management(prefs: dict) -> dict | None:
 
     return updated_prefs
 
+# =============================================================================
+# Module: panes.py
+# =============================================================================
+
+# ruff: noqa: F821
+# ADR: docs/adr/2026-01-26-modular-source-concatenation.md
+# This module is concatenated with _header.py - imports come from there
 
 # =============================================================================
 # Pane Setup
@@ -3079,6 +3271,15 @@ async def maximize_window(window):
             operation="maximize_window",
             status="failed",
             error=str(e),
+
+# =============================================================================
+# Module: main.py
+# =============================================================================
+
+# ruff: noqa: F821
+# ADR: docs/adr/2026-01-26-modular-source-concatenation.md
+# This module is concatenated with _header.py - imports come from there
+
             error_type=type(e).__name__
         )
         return False
@@ -3404,7 +3605,8 @@ async def main(connection):
             layout_tabs=tabs,
             worktrees=universal_worktrees,
             additional_repos=additional_repos,
-            untracked_folders=untracked_folders
+            untracked_folders=untracked_folders,
+            last_tab_selections=prefs.get("last_tab_selections")
         )
 
         if final_tabs is None:
@@ -3442,7 +3644,8 @@ async def main(connection):
                     layout_tabs=tabs,
                     worktrees=universal_worktrees,
                     additional_repos=additional_repos,
-                    untracked_folders=untracked_folders
+                    untracked_folders=untracked_folders,
+                    last_tab_selections=prefs.get("last_tab_selections")
                 )
                 if final_tabs is None:
                     return

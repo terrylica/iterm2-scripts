@@ -1,0 +1,32 @@
+{
+  "name": "iterm2-layout-manager",
+  "version": "0.0.0-semantically-released",
+  "private": true,
+  "description": "iTerm2 workspace automation with layout selector and tab customization",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/terrylica/iterm2-scripts.git"
+  },
+  "author": "terrylica",
+  "license": "MIT",
+  "devDependencies": {
+    "semantic-release": "^24.0.0",
+    "@semantic-release/changelog": "^6.0.0",
+    "@semantic-release/git": "^10.0.0"
+  },
+  "release": {
+    "branches": ["main"],
+    "plugins": [
+      "@semantic-release/commit-analyzer",
+      "@semantic-release/release-notes-generator",
+      ["@semantic-release/changelog", {
+        "changelogFile": "CHANGELOG.md"
+      }],
+      ["@semantic-release/git", {
+        "assets": ["CHANGELOG.md"],
+        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+      }],
+      "@semantic-release/github"
+    ]
+  }
+}
