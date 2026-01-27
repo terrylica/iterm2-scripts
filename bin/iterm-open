@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+# Resolve script directory (handles symlinks)
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")" && pwd)"
+
 # ============================================================================
 # Helper Functions (DRY)
 # ============================================================================
@@ -299,7 +302,7 @@ resolved_path=""
 if [[ "$file" = /* ]]; then
     # Path starts with / - could be absolute or root-relative
     if [[ -e "$file" ]]; then
-        # Actual absolute path exists: /Users/terryli/test.py
+        # Actual absolute path exists: /Users/user/test.py
         resolved_path="$file"
         echo "$(date): Absolute path detected (exists)" >> "$LOG_FILE"
     elif [[ "$file" =~ ^/(Users|var|tmp|opt|usr|etc|bin|sbin|System|Library|Applications|Volumes)/ ]]; then
@@ -444,7 +447,7 @@ case "$resolved_path" in
 
         # Launch DuckDB UI via wrapper script (keeps process alive)
         LOG_FILE_DUCKDB="/tmp/duckdb-ui-$$.log"
-        /Users/terryli/.local/bin/duckdb-ui-launcher "$resolved_path" "$LOG_FILE_DUCKDB" &
+        "$HOME/.local/bin/duckdb-ui-launcher" "$resolved_path" "$LOG_FILE_DUCKDB" &
         disown
 
         # Wait for URL to appear and open browser
@@ -480,7 +483,7 @@ if [[ -n "$LINE_NUM" ]]; then
 else
     echo "$(date): Opening in new iTerm2 window with Helix" >> "$LOG_FILE"
 fi
-/Users/terryli/.local/bin/open-in-helix "$resolved_path" "$LINE_NUM" "$COL_NUM"
+"$SCRIPT_DIR/open-in-helix" "$resolved_path" "$LINE_NUM" "$COL_NUM"
 
 RESULT=$?
 echo "$(date): Completed with exit code: $RESULT" >> "$LOG_FILE"
