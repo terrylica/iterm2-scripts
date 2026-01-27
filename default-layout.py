@@ -2025,6 +2025,23 @@ def discover_all_worktrees(git_repos: list[dict]) -> list[dict]:
 # Layer 2: Tab Customization Functions
 # =============================================================================
 
+# SF Symbol icons per category with status-based coloring
+# Format: "SF=symbol_name,colour=color_name"
+CATEGORY_ICONS = {
+    # Category icons (for selectable items)
+    "layout_tab": "SF=doc.text.fill,colour=blue",
+    "git_worktree": "SF=arrow.triangle.branch,colour=purple",
+    "additional_repo": "SF=folder.fill,colour=green",
+    "untracked": "SF=questionmark.folder,colour=orange",
+    # Status variants
+    "missing_path": "SF=folder.fill,colour=red",
+    # Header icons (for disabled category separators)
+    "header_layout": "SF=doc.text,colour=gray",
+    "header_worktree": "SF=arrow.triangle.branch,colour=gray",
+    "header_repo": "SF=folder,colour=gray",
+    "header_untracked": "SF=questionmark.folder,colour=gray",
+}
+
 
 def find_layout_by_name(layouts: list[dict], name: str) -> dict | None:
     """
@@ -2316,13 +2333,21 @@ def show_tab_customization_swiftdialog(
         checkboxes.append({
             "label": "—— Layout Tabs ——",
             "checked": False,
-            "disabled": True
+            "disabled": True,
+            "icon": CATEGORY_ICONS["header_layout"]
         })
         for tab in layout_tabs:
             label = f"{tab.get('name', os.path.basename(tab['dir']))}"
+            # Check if path exists for status indication
+            tab_path = Path(tab["dir"]).expanduser()
+            if tab_path.exists():
+                icon = CATEGORY_ICONS["layout_tab"]
+            else:
+                icon = CATEGORY_ICONS["missing_path"]
             checkboxes.append({
                 "label": label,
-                "checked": is_tab_selected(tab, "layout")
+                "checked": is_tab_selected(tab, "layout"),
+                "icon": icon
             })
             all_items.append({"label": label, "tab": tab, "category": "layout"})
 
@@ -2331,13 +2356,21 @@ def show_tab_customization_swiftdialog(
         checkboxes.append({
             "label": "—— Git Worktrees ——",
             "checked": False,
-            "disabled": True
+            "disabled": True,
+            "icon": CATEGORY_ICONS["header_worktree"]
         })
         for wt in worktrees:
             label = f"{wt['name']}"
+            # Check if worktree path exists
+            wt_path = Path(wt["dir"]).expanduser()
+            if wt_path.exists():
+                icon = CATEGORY_ICONS["git_worktree"]
+            else:
+                icon = CATEGORY_ICONS["missing_path"]
             checkboxes.append({
                 "label": label,
-                "checked": is_tab_selected(wt, "worktree")
+                "checked": is_tab_selected(wt, "worktree"),
+                "icon": icon
             })
             all_items.append({"label": label, "tab": wt, "category": "worktree"})
 
@@ -2346,13 +2379,21 @@ def show_tab_customization_swiftdialog(
         checkboxes.append({
             "label": "—— Additional Repos ——",
             "checked": False,
-            "disabled": True
+            "disabled": True,
+            "icon": CATEGORY_ICONS["header_repo"]
         })
         for repo in additional_repos:
             label = f"{repo['name']}"
+            # Check if repo path exists
+            repo_path = Path(repo["dir"]).expanduser()
+            if repo_path.exists():
+                icon = CATEGORY_ICONS["additional_repo"]
+            else:
+                icon = CATEGORY_ICONS["missing_path"]
             checkboxes.append({
                 "label": label,
-                "checked": is_tab_selected(repo, "discovered")
+                "checked": is_tab_selected(repo, "discovered"),
+                "icon": icon
             })
             all_items.append({"label": label, "tab": repo, "category": "discovered"})
 
@@ -2361,13 +2402,21 @@ def show_tab_customization_swiftdialog(
         checkboxes.append({
             "label": "—— Untracked Folders ——",
             "checked": False,
-            "disabled": True
+            "disabled": True,
+            "icon": CATEGORY_ICONS["header_untracked"]
         })
         for folder in untracked_folders:
             label = f"{folder['name']}"
+            # Check if folder path exists
+            folder_path = Path(folder["dir"]).expanduser()
+            if folder_path.exists():
+                icon = CATEGORY_ICONS["untracked"]
+            else:
+                icon = CATEGORY_ICONS["missing_path"]
             checkboxes.append({
                 "label": label,
-                "checked": is_tab_selected(folder, "untracked")
+                "checked": is_tab_selected(folder, "untracked"),
+                "icon": icon
             })
             all_items.append({"label": label, "tab": folder, "category": "untracked"})
 
@@ -2388,22 +2437,22 @@ def show_tab_customization_swiftdialog(
         dialog_height = 900  # Fallback
 
     # Build SwiftDialog JSON config
-    # Compact design: smaller fonts, no main icon, 90% screen height
+    # Wide compact design: larger fonts, tight spacing, no category headers
     dialog_config = {
         "title": "Customize Tabs",
-        "titlefont": "size=14",
+        "titlefont": "size=18",
         "message": f"Select tabs to open ({total_items} available):",
-        "messagefont": "size=11",
+        "messagefont": "size=14",
         "hideicon": True,
         "checkbox": checkboxes,
         "checkboxstyle": {
             "style": "switch",
-            "size": "mini"
+            "size": "small"
         },
         "button1text": "Open Selected",
         "button2text": "Cancel",
         "height": str(dialog_height),
-        "width": "400",
+        "width": "700",
         "moveable": True,
         "ontop": True,
         "json": True
@@ -2829,7 +2878,7 @@ def show_directory_management_swiftdialog(
                 "label": "─── Directories (uncheck to delete) ───",
                 "checked": False,
                 "disabled": True,
-                "icon": "SF=folder.fill,colour=blue"
+                "icon": CATEGORY_ICONS["header_repo"]
             }
         ]
 
@@ -2837,13 +2886,12 @@ def show_directory_management_swiftdialog(
             path = scan_dir["path"]
             expanded = Path(path).expanduser()
             exists = expanded.exists()
-            icon_color = "green" if exists else "red"
             display_path = str(expanded) if not path.startswith("~") else path
 
             checkboxes.append({
                 "label": display_path,
                 "checked": True,
-                "icon": f"SF=folder.fill,colour={icon_color}"
+                "icon": CATEGORY_ICONS["additional_repo"] if exists else CATEGORY_ICONS["missing_path"]
             })
 
         # Calculate dynamic height
@@ -2855,7 +2903,7 @@ def show_directory_management_swiftdialog(
 
         # Determine if Add Folder button should be enabled
         can_add_more = folders_added_this_session < max_folders_per_session
-        add_button_text = f"➕ Add Folder ({max_folders_per_session - folders_added_this_session} left)"
+        add_button_text = f"+ Add Folder ({max_folders_per_session - folders_added_this_session} left)"
 
         # Build dialog config
         dialog_config = {
