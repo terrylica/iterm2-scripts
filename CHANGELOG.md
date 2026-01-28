@@ -1,3 +1,48 @@
+# [2.0.0](https://github.com/terrylica/iterm2-scripts/compare/v1.1.0...v2.0.0) (2026-01-28)
+
+
+### Features
+
+* **dialogs:** add category-based rename with custom tab names ([3d56a2c](https://github.com/terrylica/iterm2-scripts/commit/3d56a2c689be9e88f5d766e40d340149f2922664))
+
+
+### BREAKING CHANGES
+
+* **dialogs:** Rename dialog now uses category-based flow
+
+- Extract SwiftDialog utilities to new src/swiftdialog.py module
+  - find_swiftdialog_path(), is_swiftdialog_available()
+  - run_swiftdialog(), format_tab_label()
+  - CATEGORY_ICONS dict for SF Symbol definitions
+
+- Add show_category_selector_dialog() for category selection
+  - Uses checkbox with switch style (single-select semantics)
+  - Shows item counts per category with colored icons
+  - Auto-sizes height based on content
+
+- Refactor show_rename_tabs_dialog() for category filtering
+  - Accept optional category_name parameter
+  - Auto-size height (omit height param for SwiftDialog auto-calc)
+  - Remove search/filter field (categories sufficient)
+
+- Add custom_tab_names persistence to preferences
+  - Store path -> shorthand mappings in TOML
+  - Load/save via preferences.py
+
+- Update main.py with save callback for rename flow
+  - Pass custom_tab_names and callback to show_tab_customization()
+
+- Fix truncated panes.py (missing error_type and return)
+- Fix main.py orphaned code from bad module split
+- Fix type hints: callable -> Callable
+
+- Add mise.toml for task orchestration
+  - build, lint, validate, release tasks
+  - test:aliases, test:dialog utilities
+
+SRED-Type: experimental-development
+SRED-Claim: ITERM2-SCRIPTS
+
 # [1.1.0](https://github.com/terrylica/iterm2-scripts/compare/v1.0.0...v1.1.0) (2026-01-27)
 
 
