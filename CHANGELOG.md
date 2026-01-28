@@ -1,3 +1,10 @@
+## [2.0.1](https://github.com/terrylica/iterm2-scripts/compare/v2.0.0...v2.0.1) (2026-01-28)
+
+
+### Bug Fixes
+
+* **dialogs:** integrate category-based rename flow ([31233da](https://github.com/terrylica/iterm2-scripts/commit/31233da920991fcf867f0c26f23054af0859c776))
+
 # [2.0.0](https://github.com/terrylica/iterm2-scripts/compare/v1.1.0...v2.0.0) (2026-01-28)
 
 
