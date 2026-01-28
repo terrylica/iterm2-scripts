@@ -1,3 +1,10 @@
+## [2.0.2](https://github.com/terrylica/iterm2-scripts/compare/v2.0.1...v2.0.2) (2026-01-28)
+
+
+### Bug Fixes
+
+* **bin:** add PATH augmentation and worktree support to iterm-open ([14fb958](https://github.com/terrylica/iterm2-scripts/commit/14fb9589da32e08497dc23ea0de2adfab79a420f))
+
 ## [2.0.1](https://github.com/terrylica/iterm2-scripts/compare/v2.0.0...v2.0.1) (2026-01-28)
 
 
