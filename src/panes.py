@@ -216,3 +216,6 @@ async def maximize_window(window):
             operation="maximize_window",
             status="failed",
             error=str(e),
+            error_type=type(e).__name__
+        )
+        return False

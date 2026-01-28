@@ -1,27 +1,11 @@
 # ruff: noqa: F821
 # ADR: docs/adr/2026-01-26-modular-source-concatenation.md
 # This module is concatenated with _header.py - imports come from there
+# SwiftDialog utilities (CATEGORY_ICONS, find_swiftdialog_path, etc.) are in swiftdialog.py
 
 # =============================================================================
-# Layer 2: Tab Customization Functions
+# Dialog Functions (Tab Customization, Directory Management)
 # =============================================================================
-
-# SF Symbol icons per category with status-based coloring
-# Format: "SF=symbol_name,colour=color_name"
-CATEGORY_ICONS = {
-    # Category icons (for selectable items)
-    "layout_tab": "SF=doc.text.fill,colour=blue",
-    "git_worktree": "SF=arrow.triangle.branch,colour=purple",
-    "additional_repo": "SF=folder.fill,colour=green",
-    "untracked": "SF=questionmark.folder,colour=orange",
-    # Status variants
-    "missing_path": "SF=folder.fill,colour=red",
-    # Header icons (for disabled category separators)
-    "header_layout": "SF=doc.text,colour=gray",
-    "header_worktree": "SF=arrow.triangle.branch,colour=gray",
-    "header_repo": "SF=folder,colour=gray",
-    "header_untracked": "SF=questionmark.folder,colour=gray",
-}
 
 
 def find_layout_by_name(layouts: list[dict], name: str) -> dict | None:
@@ -42,82 +26,8 @@ def find_layout_by_name(layouts: list[dict], name: str) -> dict | None:
 
 
 # =============================================================================
-# SwiftDialog Integration (Modern macOS UI)
+# Tool Installation Helpers
 # =============================================================================
-
-# Cached SwiftDialog path (None = not checked yet, False = not found)
-_swiftdialog_path_cache: str | None | bool = None
-
-
-def find_swiftdialog_path() -> str | None:
-    """
-    Find SwiftDialog binary across Intel and Apple Silicon Homebrew paths.
-
-    Search order:
-    1. /opt/homebrew/bin/dialog (Apple Silicon Homebrew)
-    2. /usr/local/bin/dialog (Intel Homebrew)
-    3. shutil.which("dialog") (fallback to PATH)
-
-    Returns:
-        Path to SwiftDialog binary, or None if not found
-    """
-    global _swiftdialog_path_cache
-
-    # Return cached result if already checked
-    if _swiftdialog_path_cache is not None:
-        return _swiftdialog_path_cache if _swiftdialog_path_cache else None
-
-    # Search paths in order of preference
-    search_paths = [
-        "/opt/homebrew/bin/dialog",  # Apple Silicon Homebrew
-        "/usr/local/bin/dialog",      # Intel Homebrew
-    ]
-
-    for path in search_paths:
-        if Path(path).exists():
-            _swiftdialog_path_cache = path
-            logger.debug(
-                "Found SwiftDialog",
-                path=path,
-                operation="find_swiftdialog_path",
-            )
-            return path
-
-    # Fallback to PATH lookup
-    path_result = shutil.which("dialog")
-    if path_result:
-        _swiftdialog_path_cache = path_result
-        logger.debug(
-            "Found SwiftDialog via PATH",
-            path=path_result,
-            operation="find_swiftdialog_path",
-        )
-        return path_result
-
-    # Not found
-    _swiftdialog_path_cache = False
-    logger.debug(
-        "SwiftDialog not found",
-        searched=search_paths,
-        operation="find_swiftdialog_path",
-    )
-    return None
-
-
-def is_swiftdialog_available() -> bool:
-    """Check if SwiftDialog is installed."""
-    return find_swiftdialog_path() is not None
-
-
-def is_homebrew_available() -> bool:
-    """
-    Check if Homebrew is installed and available.
-
-    Returns:
-        True if brew command is available in PATH
-    """
-    return shutil.which("brew") is not None
-
 
 # Track tools we've offered to install this session (to avoid repeated prompts)
 _install_offers_shown: set[str] = set()
@@ -246,12 +156,315 @@ async def offer_tool_installation(
     return False
 
 
+# =============================================================================
+# Category Selector Dialog
+# =============================================================================
+
+
+def show_category_selector_dialog(
+    categories: list[dict],
+) -> str | None:
+    """
+    Show dialog to select which category to edit.
+
+    Uses radio buttons (single selection) so user edits one category at a time.
+
+    Args:
+        categories: List of dicts with "name", "count", and "icon" keys
+
+    Returns:
+        Selected category name, or None if cancelled
+    """
+    if not categories:
+        logger.debug("No categories to select", operation="show_category_selector_dialog")
+        return None
+
+    # Filter out empty categories
+    non_empty = [c for c in categories if c.get("count", 0) > 0]
+    if not non_empty:
+        logger.debug("All categories are empty", operation="show_category_selector_dialog")
+        return None
+
+    # Build radio buttons for each category
+    # SwiftDialog uses "selectitems" for radio buttons
+    select_items = []
+    for cat in non_empty:
+        select_items.append({
+            "title": f"{cat['name']} ({cat['count']} items)",
+            "icon": cat.get("icon", "SF=folder.fill"),
+        })
+
+    dialog_config = {
+        "title": "Select Category to Edit",
+        "titlefont": "size=18",
+        "message": "Choose a category to customize shorthand names:",
+        "messagefont": "size=14",
+        "appearance": "dark",
+        "hideicon": True,
+        "selectitems": select_items,
+        "button1text": "Edit Selected",
+        "button2text": "Cancel",
+        "height": "350",
+        "width": "600",
+        "moveable": True,
+        "ontop": True,
+        "json": True
+    }
+
+    logger.info(
+        "Showing category selector",
+        operation="show_category_selector_dialog",
+        category_count=len(non_empty)
+    )
+
+    return_code, output = run_swiftdialog(dialog_config)
+
+    if return_code != 0:
+        logger.debug(
+            "Category selector cancelled",
+            return_code=return_code,
+            operation="show_category_selector_dialog"
+        )
+        return None
+
+    if not output:
+        logger.warning(
+            "No output from category selector",
+            operation="show_category_selector_dialog"
+        )
+        return None
+
+    # Parse selected category from output
+    # SwiftDialog returns: {"SelectedOption": "Layout Tabs (5 items)", ...}
+    selected = output.get("SelectedOption", "")
+    if not selected:
+        # Try alternate key format
+        selected = output.get("selectedOption", "")
+
+    # Extract category name (strip the count suffix)
+    # "Layout Tabs (5 items)" -> "Layout Tabs"
+    category_name = selected.rsplit(" (", 1)[0] if " (" in selected else selected
+
+    # Match back to original category names
+    for cat in non_empty:
+        if cat["name"] == category_name:
+            logger.info(
+                "Category selected",
+                category=category_name,
+                operation="show_category_selector_dialog"
+            )
+            return category_name
+
+    logger.warning(
+        "Selected category not found",
+        selected=selected,
+        operation="show_category_selector_dialog"
+    )
+    return None
+
+
+# =============================================================================
+# Rename Tabs Dialog (Category-based with Search)
+# =============================================================================
+
+
+def show_rename_tabs_dialog(
+    items: list[dict],
+    custom_names: dict[str, str] | None = None,
+    category_name: str | None = None,
+    search_filter: str | None = None
+) -> dict[str, str] | None:
+    """
+    Show dialog to edit shorthand names for tabs.
+
+    When category_name is provided, only shows items in that category.
+    Includes search field to filter items within the category.
+
+    Args:
+        items: List of dicts with "dir"/"path", "name", and optional "category" keys
+        custom_names: Existing custom name mappings (path -> name)
+        category_name: If provided, filter to this category only
+        search_filter: Pre-populated search filter (optional)
+
+    Returns:
+        Dict mapping path -> new_name if saved, None if cancelled
+    """
+    if not items:
+        logger.debug("No items to rename", operation="show_rename_tabs_dialog")
+        return None
+
+    if custom_names is None:
+        custom_names = {}
+
+    # Filter by category if specified
+    if category_name:
+        items = [i for i in items if i.get("category") == category_name]
+
+    if not items:
+        logger.debug(
+            "No items after category filter",
+            category=category_name,
+            operation="show_rename_tabs_dialog"
+        )
+        return None
+
+    # Build text fields for each item
+    textfields = []
+
+    # Add search field at top
+    textfields.append({
+        "title": "Search / Filter",
+        "value": search_filter or "",
+        "prompt": "Type to filter items (leave empty to show all)",
+        "name": "search_filter"
+    })
+
+    for item in items:
+        path = item.get("dir") or item.get("path", "")
+        # Use custom name if set, otherwise use item's current name
+        current_name = custom_names.get(path) or item.get("name", os.path.basename(path))
+
+        # Display path with ~ for home directory
+        path_display = path.replace(str(Path.home()), "~")
+
+        textfields.append({
+            "title": path_display,
+            "value": current_name,
+            "prompt": "Shorthand name"
+        })
+
+    # Calculate dialog height dynamically based on screen size
+    try:
+        screen = NSScreen.mainScreen()
+        if screen:
+            screen_height = int(screen.frame().size.height)
+            # Use 70% of screen height for rename dialog (less than main dialog)
+            max_height = int(screen_height * 0.70)
+        else:
+            max_height = 700
+    except (AttributeError, TypeError, ValueError):
+        max_height = 700
+
+    # Calculate needed height: base + items * per_item
+    base_height = 180  # Extra for search field
+    per_item_height = 55
+    needed_height = base_height + len(items) * per_item_height
+    dialog_height = min(needed_height, max_height)
+
+    # Build title with category info
+    title = "Rename Tabs"
+    if category_name:
+        title = f"Rename: {category_name}"
+
+    dialog_config = {
+        "title": title,
+        "titlefont": "size=18",
+        "message": f"Edit shorthand names ({len(items)} items):",
+        "messagefont": "size=14",
+        "appearance": "dark",
+        "hideicon": True,
+        "textfield": textfields,
+        "button1text": "Save",
+        "button2text": "Cancel",
+        "infobuttontext": "Filter",  # Trigger re-filter
+        "height": str(dialog_height),
+        "width": "750",
+        "moveable": True,
+        "ontop": True,
+        "json": True
+    }
+
+    logger.info(
+        "Showing rename dialog",
+        operation="show_rename_tabs_dialog",
+        category=category_name,
+        item_count=len(items),
+        dialog_height=dialog_height
+    )
+
+    # Run dialog
+    return_code, output = run_swiftdialog(dialog_config)
+
+    if return_code == 3:
+        # Info button clicked - user wants to filter
+        # Get the search value and recursively call with filter applied
+        if output:
+            new_filter = output.get("search_filter", "").strip().lower()
+            if new_filter:
+                # Filter items by search term
+                filtered_items = [
+                    i for i in items
+                    if new_filter in (i.get("dir") or i.get("path", "")).lower()
+                    or new_filter in (i.get("name", "")).lower()
+                    or new_filter in custom_names.get(
+                        i.get("dir") or i.get("path", ""), ""
+                    ).lower()
+                ]
+                if filtered_items:
+                    logger.info(
+                        "Applying search filter",
+                        filter=new_filter,
+                        matched=len(filtered_items),
+                        operation="show_rename_tabs_dialog"
+                    )
+                    # Recursive call with filtered items
+                    return show_rename_tabs_dialog(
+                        filtered_items,
+                        custom_names,
+                        category_name,
+                        new_filter
+                    )
+        # No valid filter, re-show same dialog
+        return show_rename_tabs_dialog(items, custom_names, category_name, None)
+
+    if return_code != 0:
+        logger.debug(
+            "Rename dialog cancelled",
+            return_code=return_code,
+            operation="show_rename_tabs_dialog"
+        )
+        return None
+
+    if not output:
+        logger.warning(
+            "No output from rename dialog",
+            operation="show_rename_tabs_dialog"
+        )
+        return None
+
+    # Parse output - SwiftDialog returns text field values
+    # Output format: {"<path_display>": "<value>", "search_filter": "...", ...}
+    result = {}
+    for item in items:
+        path = item.get("dir") or item.get("path", "")
+        path_display = path.replace(str(Path.home()), "~")
+
+        if path_display in output:
+            new_name = output[path_display].strip()
+            if new_name:
+                result[path] = new_name
+            else:
+                # Empty name - use basename as fallback
+                result[path] = os.path.basename(path)
+
+    logger.info(
+        "Rename dialog completed",
+        renamed_count=len(result),
+        category=category_name,
+        operation="show_rename_tabs_dialog"
+    )
+
+    return result
+
+
 def show_tab_customization_swiftdialog(
     layout_tabs: list[dict],
     worktrees: list[dict],
     additional_repos: list[dict],
     untracked_folders: list[dict] | None = None,
-    last_tab_selections: list[str] | None = None
+    last_tab_selections: list[str] | None = None,
+    custom_tab_names: dict[str, str] | None = None,
+    on_rename_requested: Callable | None = None
 ) -> list[dict] | None:
     """
     Show Layer 2 checkbox dialog using SwiftDialog (modern macOS UI).
@@ -265,14 +478,18 @@ def show_tab_customization_swiftdialog(
         additional_repos: Git repos not in layout
         untracked_folders: Directories without .git
         last_tab_selections: Previously selected tab names (for restoring state)
+        custom_tab_names: Dict mapping paths to custom shorthand names
+        on_rename_requested: Callback when "Rename Tabs" is clicked, receives all_items
 
     Returns:
         List of selected tabs, or None if cancelled
     """
-    import tempfile
 
     if untracked_folders is None:
         untracked_folders = []
+
+    if custom_tab_names is None:
+        custom_tab_names = {}
 
     op_trace_id = str(uuid4())
     total_items = len(layout_tabs) + len(worktrees) + len(additional_repos) + len(untracked_folders)
@@ -318,9 +535,12 @@ def show_tab_customization_swiftdialog(
             "icon": CATEGORY_ICONS["header_layout"]
         })
         for tab in layout_tabs:
-            label = f"{tab.get('name', os.path.basename(tab['dir']))}"
+            path = tab["dir"]
+            # Use custom name if set, otherwise use tab's name or basename
+            name = custom_tab_names.get(path) or tab.get("name", os.path.basename(path))
+            label = format_tab_label(path, name)
             # Check if path exists for status indication
-            tab_path = Path(tab["dir"]).expanduser()
+            tab_path = Path(path).expanduser()
             if tab_path.exists():
                 icon = CATEGORY_ICONS["layout_tab"]
             else:
@@ -341,9 +561,11 @@ def show_tab_customization_swiftdialog(
             "icon": CATEGORY_ICONS["header_worktree"]
         })
         for wt in worktrees:
-            label = f"{wt['name']}"
+            path = wt["dir"]
+            name = custom_tab_names.get(path) or wt["name"]
+            label = format_tab_label(path, name)
             # Check if worktree path exists
-            wt_path = Path(wt["dir"]).expanduser()
+            wt_path = Path(path).expanduser()
             if wt_path.exists():
                 icon = CATEGORY_ICONS["git_worktree"]
             else:
@@ -364,9 +586,11 @@ def show_tab_customization_swiftdialog(
             "icon": CATEGORY_ICONS["header_repo"]
         })
         for repo in additional_repos:
-            label = f"{repo['name']}"
+            path = repo["dir"]
+            name = custom_tab_names.get(path) or repo["name"]
+            label = format_tab_label(path, name)
             # Check if repo path exists
-            repo_path = Path(repo["dir"]).expanduser()
+            repo_path = Path(path).expanduser()
             if repo_path.exists():
                 icon = CATEGORY_ICONS["additional_repo"]
             else:
@@ -387,9 +611,11 @@ def show_tab_customization_swiftdialog(
             "icon": CATEGORY_ICONS["header_untracked"]
         })
         for folder in untracked_folders:
-            label = f"{folder['name']}"
+            path = folder["dir"]
+            name = custom_tab_names.get(path) or folder["name"]
+            label = format_tab_label(path, name)
             # Check if folder path exists
-            folder_path = Path(folder["dir"]).expanduser()
+            folder_path = Path(path).expanduser()
             if folder_path.exists():
                 icon = CATEGORY_ICONS["untracked"]
             else:
@@ -418,12 +644,13 @@ def show_tab_customization_swiftdialog(
         dialog_height = 900  # Fallback
 
     # Build SwiftDialog JSON config
-    # Wide compact design: larger fonts, tight spacing, no category headers
+    # Wide compact design: larger fonts, tight spacing, path + shorthand labels
     dialog_config = {
         "title": "Customize Tabs",
         "titlefont": "size=18",
         "message": f"Select tabs to open ({total_items} available):",
         "messagefont": "size=14",
+        "appearance": "dark",  # Force dark mode for consistent toggle colors
         "hideicon": True,
         "checkbox": checkboxes,
         "checkboxstyle": {
@@ -432,8 +659,9 @@ def show_tab_customization_swiftdialog(
         },
         "button1text": "Open Selected",
         "button2text": "Cancel",
+        "infobuttontext": "Rename Tabs",  # Info button triggers rename dialog
         "height": str(dialog_height),
-        "width": "700",
+        "width": "900",  # Wider to accommodate path + shorthand labels
         "moveable": True,
         "ontop": True,
         "json": True
@@ -469,7 +697,7 @@ def show_tab_customization_swiftdialog(
         # Clean up temp file
         Path(config_path).unlink(missing_ok=True)
 
-        # Check return code (0=button1/OK, 2=button2/Cancel, 4=timeout)
+        # Check return code (0=button1/OK, 2=button2/Cancel, 3=info button, 4=timeout)
         if result.returncode == 2:
             logger.info(
                 "SwiftDialog cancelled by user",
@@ -478,6 +706,19 @@ def show_tab_customization_swiftdialog(
                 trace_id=op_trace_id
             )
             return None
+
+        if result.returncode == 3:
+            # Info button clicked - "Rename Tabs"
+            logger.info(
+                "Rename Tabs requested",
+                operation="show_tab_customization_swiftdialog",
+                status="rename_requested",
+                trace_id=op_trace_id
+            )
+            if on_rename_requested:
+                on_rename_requested(all_items)
+            # Return special marker to indicate rename was requested
+            return "RENAME_REQUESTED"
 
         if result.returncode == 4:
             logger.warning(
@@ -698,7 +939,9 @@ async def show_tab_customization(
     worktrees: list[dict],
     additional_repos: list[dict],
     untracked_folders: list[dict] | None = None,
-    last_tab_selections: list[str] | None = None
+    last_tab_selections: list[str] | None = None,
+    custom_tab_names: dict[str, str] | None = None,
+    save_preferences_callback: Callable | None = None
 ) -> list[dict] | None:
     """
     Show Layer 2 checkbox dialog for tab customization.
@@ -713,6 +956,8 @@ async def show_tab_customization(
         additional_repos: Git repos not in layout
         untracked_folders: Directories without .git
         last_tab_selections: Previously selected tab names (for restoring state)
+        custom_tab_names: Dict mapping paths to custom shorthand names
+        save_preferences_callback: Callback to save preferences when names change
 
     Returns:
         List of selected tabs, or None if cancelled
@@ -720,25 +965,87 @@ async def show_tab_customization(
     if untracked_folders is None:
         untracked_folders = []
 
+    if custom_tab_names is None:
+        custom_tab_names = {}
+
     # Prefer SwiftDialog for better UX with many items
     if is_swiftdialog_available():
         logger.debug(
             "Using SwiftDialog for tab customization",
             operation="show_tab_customization"
         )
-        # SwiftDialog is synchronous (subprocess), run in executor
+
+        # Loop to handle rename dialog flow
         import asyncio
+        from functools import partial
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            show_tab_customization_swiftdialog,
-            layout_tabs,
-            worktrees,
-            additional_repos,
-            untracked_folders,
-            last_tab_selections
-        )
-        return result
+
+        while True:
+            result = await loop.run_in_executor(
+                None,
+                partial(
+                    show_tab_customization_swiftdialog,
+                    layout_tabs,
+                    worktrees,
+                    additional_repos,
+                    untracked_folders,
+                    last_tab_selections,
+                    custom_tab_names,
+                    None  # on_rename_requested not used - we check return value instead
+                )
+            )
+
+            # Check if rename was requested
+            if result == "RENAME_REQUESTED":
+                # Build items list for rename dialog from all inputs
+                items_to_rename = []
+                for tab in layout_tabs:
+                    items_to_rename.append({
+                        "path": tab.get("dir", ""),
+                        "name": tab.get("name", os.path.basename(tab.get("dir", "")))
+                    })
+                for wt in worktrees:
+                    items_to_rename.append({
+                        "path": wt.get("dir", ""),
+                        "name": wt.get("name", "")
+                    })
+                for repo in additional_repos:
+                    items_to_rename.append({
+                        "path": repo.get("dir", ""),
+                        "name": repo.get("name", "")
+                    })
+                for folder in untracked_folders:
+                    items_to_rename.append({
+                        "path": folder.get("dir", ""),
+                        "name": folder.get("name", "")
+                    })
+
+                # Filter out items without paths
+                items_to_rename = [i for i in items_to_rename if i["path"]]
+
+                new_names = await loop.run_in_executor(
+                    None,
+                    partial(show_rename_tabs_dialog, items_to_rename, custom_tab_names)
+                )
+
+                if new_names:
+                    # Update custom_tab_names with new values
+                    custom_tab_names.update(new_names)
+
+                    # Save preferences if callback provided
+                    if save_preferences_callback:
+                        save_preferences_callback(custom_tab_names)
+
+                    logger.info(
+                        "Tab names updated",
+                        renamed_count=len(new_names),
+                        operation="show_tab_customization"
+                    )
+
+                # Re-show main dialog with updated names
+                continue
+
+            return result
     else:
         logger.debug(
             "SwiftDialog not available, using PolyModalAlert fallback",
@@ -892,6 +1199,7 @@ def show_directory_management_swiftdialog(
             "title": "Manage Scan Directories",
             "message": f"**Checked** = keep, **Unchecked** = delete.\n{len(working_dirs)} directories configured.",
             "messagefont": "size=13",
+            "appearance": "dark",  # Force dark mode for consistent toggle colors
             "icon": "SF=folder.badge.gearshape,colour=blue",
             "iconsize": "50",
             "checkbox": checkboxes,

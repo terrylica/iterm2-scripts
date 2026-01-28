@@ -125,6 +125,7 @@ def load_preferences() -> dict:
         "remember_choice": False,
         "last_layout": None,
         "scan_directories": DEFAULT_SCAN_DIRECTORIES.copy(),
+        "custom_tab_names": {},  # path -> shorthand name mappings
     }
 
     if not PREFERENCES_PATH.exists():
@@ -215,8 +216,13 @@ def atomic_write_file(path: Path, content: str) -> None:
         # Clean up temp file on failure
         try:
             os.unlink(temp_path)
-        except OSError:
-            pass
+        except OSError as cleanup_error:
+            logger.debug(
+                "Could not clean up temp file",
+                path=temp_path,
+                error=str(cleanup_error),
+                operation="atomic_write_file"
+            )
 
         # Provide clear message for disk full
         if e.errno == errno.ENOSPC:
@@ -253,6 +259,16 @@ def save_preferences(prefs: dict) -> None:
         # Format as TOML array
         tabs_str = ", ".join(f'"{t}"' for t in prefs["last_tab_selections"])
         lines.append(f"last_tab_selections = [{tabs_str}]")
+
+    # Save custom tab names as TOML inline table
+    custom_names = prefs.get("custom_tab_names")
+    if custom_names:
+        lines.append("")
+        lines.append("# Custom shorthand names for tabs (path -> name)")
+        lines.append("[custom_tab_names]")
+        for path, name in sorted(custom_names.items()):
+            # Escape path for TOML key (use quotes for paths with special chars)
+            lines.append(f'"{path}" = "{name}"')
 
     # Save scan directories as TOML array of tables
     scan_dirs = prefs.get("scan_directories")

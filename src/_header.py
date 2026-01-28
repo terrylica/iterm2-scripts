@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: F401
 # /// script
 # requires-python = ">=3.11"
 # dependencies = ["iterm2", "pyobjc", "loguru", "platformdirs"]
@@ -31,6 +32,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import tomllib
 import traceback
@@ -38,9 +40,8 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Generic, TypeVar
+from typing import Callable, Generic, TypeVar
 from uuid import uuid4
-
 
 # =============================================================================
 # PATH Augmentation for iTerm2 AutoLaunch Environment

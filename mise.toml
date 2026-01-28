@@ -1,0 +1,115 @@
+# mise.toml - Task orchestration for iterm2-scripts
+# https://mise.jdx.dev/tasks/
+
+[env]
+# Python environment
+PYTHONDONTWRITEBYTECODE = "1"
+
+[tools]
+python = "3.12"
+node = "22"
+
+# =============================================================================
+# Build Tasks
+# =============================================================================
+
+[tasks.build]
+description = "Build concatenated default-layout.py from src/ modules"
+run = "python build.py"
+sources = ["src/*.py", "build.py"]
+outputs = ["default-layout.py"]
+
+[tasks."build:check"]
+description = "Verify built output matches source (no rebuild needed)"
+run = "python build.py --check"
+
+# =============================================================================
+# Development Tasks
+# =============================================================================
+
+[tasks.lint]
+description = "Run ruff linter on source files"
+run = "ruff check src/"
+
+[tasks."lint:fix"]
+description = "Auto-fix ruff issues"
+run = "ruff check src/ --fix"
+
+[tasks."lint:silent"]
+description = "Check only silent failure patterns (critical errors)"
+run = "ruff check src/ --select=E722,S110,BLE001,PLW1510"
+
+[tasks.syntax]
+description = "Verify Python syntax of built output"
+run = "python -m py_compile default-layout.py"
+depends = ["build"]
+
+[tasks.validate]
+description = "Full validation: build + lint + syntax"
+depends = ["build", "lint:silent", "syntax"]
+
+# =============================================================================
+# Setup Tasks
+# =============================================================================
+
+[tasks.setup]
+description = "Run setup script to configure iTerm2 AutoLaunch"
+run = "bash setup.sh"
+
+[tasks."setup:deps"]
+description = "Install Python dependencies"
+run = "uv pip install iterm2 pyobjc loguru platformdirs"
+
+# =============================================================================
+# Release Tasks
+# =============================================================================
+
+[tasks."release:dry"]
+description = "Dry-run semantic-release (no actual release)"
+run = "npm run release -- --dry-run"
+depends = ["validate"]
+
+[tasks.release]
+description = "Run semantic-release to create new version"
+run = "npm run release"
+depends = ["validate"]
+
+[tasks."release:full"]
+description = "Full release: validate, release, push"
+run = """
+npm run release
+git push --follow-tags
+"""
+depends = ["validate"]
+
+# =============================================================================
+# Test Tasks
+# =============================================================================
+
+[tasks."test:aliases"]
+description = "Test shell alias introspection"
+run = """
+python -c "
+import subprocess
+result = subprocess.run(
+    ['zsh', '-ic', 'alias'],
+    capture_output=True, text=True, timeout=5
+)
+print('Aliases found:', len(result.stdout.strip().split('\\n')))
+print(result.stdout[:500])
+"
+"""
+
+[tasks."test:dialog"]
+description = "Test SwiftDialog availability"
+run = """
+python -c "
+import shutil
+path = shutil.which('dialog')
+print(f'SwiftDialog: {path or \"NOT FOUND\"}')
+if path:
+    import subprocess
+    result = subprocess.run([path, '--version'], capture_output=True, text=True)
+    print(f'Version: {result.stdout.strip()}')
+"
+"""

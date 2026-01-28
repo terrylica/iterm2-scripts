@@ -12,16 +12,16 @@ Usage:
     python build.py --check   # Verify output matches (for CI)
 
 Module order matters for dependencies:
-1. _header.py      - PEP 723 metadata, docstring, imports, PATH augmentation
-2. result.py       - Error/Result types (no deps)
+1. _header.py       - PEP 723 metadata, docstring, imports, PATH augmentation
+2. result.py        - Error/Result types (no deps)
 3. logging_setup.py - Logger configuration (depends on result for types)
-4. config.py       - Config loading, constants
-5. shell.py        - Shell alias introspection, command validation
-6. preferences.py  - Preferences load/save
-7. discovery.py    - Layout/worktree/repo discovery
-8. dialogs.py      - SwiftDialog, wizards, selectors
-9. panes.py        - Tab/pane creation, window management
-10. main.py        - Entry point (async main, iterm2.run_until_complete)
+4. config.py        - Config loading, constants, shell alias introspection
+5. preferences.py   - Preferences load/save
+6. discovery.py     - Layout/worktree/repo discovery
+7. swiftdialog.py   - SwiftDialog utilities (icons, path finding, runner)
+8. dialogs.py       - Dialog functions (tab customization, directory management)
+9. panes.py         - Tab/pane creation, window management
+10. main.py         - Entry point (async main, iterm2.run_until_complete)
 """
 
 import re
@@ -29,7 +29,6 @@ import sys
 from pathlib import Path
 
 # Module order (dependencies flow downward)
-# Note: shell.py was merged into config.py during split
 MODULE_ORDER = [
     "_header.py",
     "logging_setup.py",
@@ -37,7 +36,8 @@ MODULE_ORDER = [
     "config.py",        # Includes shell alias introspection
     "preferences.py",
     "discovery.py",
-    "dialogs.py",
+    "swiftdialog.py",   # SwiftDialog utilities (must come before dialogs.py)
+    "dialogs.py",       # Dialog functions (uses swiftdialog.py utilities)
     "panes.py",
     "main.py",
 ]
@@ -58,6 +58,7 @@ STDLIB_IMPORTS = {
     "import sys",
     "import time",
     "import tomllib",
+    "import tempfile",
     "import traceback",
     "from contextvars import ContextVar",
     "from dataclasses import dataclass, field",

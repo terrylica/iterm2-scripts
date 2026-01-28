@@ -2,10 +2,6 @@
 # ADR: docs/adr/2026-01-26-modular-source-concatenation.md
 # This module is concatenated with _header.py - imports come from there
 
-            error_type=type(e).__name__
-        )
-        return False
-
 
 async def main(connection):
     """
@@ -322,13 +318,20 @@ async def main(connection):
             status="layer2_start",
             trace_id=main_trace_id
         )
+        # Callback to save custom tab names when user renames
+        def save_custom_names(new_names: dict[str, str]) -> None:
+            prefs["custom_tab_names"] = new_names
+            save_preferences(prefs)
+
         final_tabs = await show_tab_customization(
             connection,
             layout_tabs=tabs,
             worktrees=universal_worktrees,
             additional_repos=additional_repos,
             untracked_folders=untracked_folders,
-            last_tab_selections=prefs.get("last_tab_selections")
+            last_tab_selections=prefs.get("last_tab_selections"),
+            custom_tab_names=prefs.get("custom_tab_names", {}),
+            save_preferences_callback=save_custom_names
         )
 
         if final_tabs is None:
@@ -367,7 +370,9 @@ async def main(connection):
                     worktrees=universal_worktrees,
                     additional_repos=additional_repos,
                     untracked_folders=untracked_folders,
-                    last_tab_selections=prefs.get("last_tab_selections")
+                    last_tab_selections=prefs.get("last_tab_selections"),
+                    custom_tab_names=prefs.get("custom_tab_names", {}),
+                    save_preferences_callback=save_custom_names
                 )
                 if final_tabs is None:
                     return
