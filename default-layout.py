@@ -2431,13 +2431,13 @@ def show_category_selector_dialog(
         logger.debug("All categories are empty", operation="show_category_selector_dialog")
         return None
 
-    # Build radio buttons for each category
-    # SwiftDialog uses "selectitems" for radio buttons
-    select_items = []
+    # Build checkboxes for each category (switch style for visual clarity)
+    checkboxes = []
     for cat in non_empty:
-        select_items.append({
-            "title": f"{cat['name']} ({cat['count']} items)",
+        checkboxes.append({
+            "label": f"{cat['name']} ({cat['count']} items)",
             "icon": cat.get("icon", "SF=folder.fill"),
+            "checked": False
         })
 
     dialog_config = {
@@ -2447,10 +2447,10 @@ def show_category_selector_dialog(
         "messagefont": "size=14",
         "appearance": "dark",
         "hideicon": True,
-        "selectitems": select_items,
+        "checkbox": checkboxes,
+        "checkboxstyle": {"style": "switch", "size": "small"},
         "button1text": "Edit Selected",
         "button2text": "Cancel",
-        "height": "350",
         "width": "600",
         "moveable": True,
         "ontop": True,
@@ -2480,30 +2480,26 @@ def show_category_selector_dialog(
         )
         return None
 
-    # Parse selected category from output
-    # SwiftDialog returns: {"SelectedOption": "Layout Tabs (5 items)", ...}
-    selected = output.get("SelectedOption", "")
-    if not selected:
-        # Try alternate key format
-        selected = output.get("selectedOption", "")
+    # Parse selected category from checkbox output
+    # SwiftDialog returns: {"Layout Tabs (5 items)": true, "Git Worktrees (3 items)": false, ...}
+    for label, selected in output.items():
+        if selected:
+            # Extract category name (strip the count suffix)
+            # "Layout Tabs (5 items)" -> "Layout Tabs"
+            category_name = label.rsplit(" (", 1)[0] if " (" in label else label
 
-    # Extract category name (strip the count suffix)
-    # "Layout Tabs (5 items)" -> "Layout Tabs"
-    category_name = selected.rsplit(" (", 1)[0] if " (" in selected else selected
+            # Match back to original category names
+            for cat in non_empty:
+                if cat["name"] == category_name:
+                    logger.info(
+                        "Category selected",
+                        category=category_name,
+                        operation="show_category_selector_dialog"
+                    )
+                    return category_name
 
-    # Match back to original category names
-    for cat in non_empty:
-        if cat["name"] == category_name:
-            logger.info(
-                "Category selected",
-                category=category_name,
-                operation="show_category_selector_dialog"
-            )
-            return category_name
-
-    logger.warning(
-        "Selected category not found",
-        selected=selected,
+    logger.debug(
+        "No category selected",
         operation="show_category_selector_dialog"
     )
     return None
@@ -2517,20 +2513,18 @@ def show_category_selector_dialog(
 def show_rename_tabs_dialog(
     items: list[dict],
     custom_names: dict[str, str] | None = None,
-    category_name: str | None = None,
-    search_filter: str | None = None
+    category_name: str | None = None
 ) -> dict[str, str] | None:
     """
     Show dialog to edit shorthand names for tabs.
 
     When category_name is provided, only shows items in that category.
-    Includes search field to filter items within the category.
+    Dialog auto-sizes height based on content (no explicit height parameter).
 
     Args:
         items: List of dicts with "dir"/"path", "name", and optional "category" keys
         custom_names: Existing custom name mappings (path -> name)
         category_name: If provided, filter to this category only
-        search_filter: Pre-populated search filter (optional)
 
     Returns:
         Dict mapping path -> new_name if saved, None if cancelled
@@ -2556,15 +2550,6 @@ def show_rename_tabs_dialog(
 
     # Build text fields for each item
     textfields = []
-
-    # Add search field at top
-    textfields.append({
-        "title": "Search / Filter",
-        "value": search_filter or "",
-        "prompt": "Type to filter items (leave empty to show all)",
-        "name": "search_filter"
-    })
-
     for item in items:
         path = item.get("dir") or item.get("path", "")
         # Use custom name if set, otherwise use item's current name
@@ -2576,32 +2561,15 @@ def show_rename_tabs_dialog(
         textfields.append({
             "title": path_display,
             "value": current_name,
-            "prompt": "Shorthand name"
+            "prompt": "Shorthand"
         })
-
-    # Calculate dialog height dynamically based on screen size
-    try:
-        screen = NSScreen.mainScreen()
-        if screen:
-            screen_height = int(screen.frame().size.height)
-            # Use 70% of screen height for rename dialog (less than main dialog)
-            max_height = int(screen_height * 0.70)
-        else:
-            max_height = 700
-    except (AttributeError, TypeError, ValueError):
-        max_height = 700
-
-    # Calculate needed height: base + items * per_item
-    base_height = 180  # Extra for search field
-    per_item_height = 55
-    needed_height = base_height + len(items) * per_item_height
-    dialog_height = min(needed_height, max_height)
 
     # Build title with category info
     title = "Rename Tabs"
     if category_name:
         title = f"Rename: {category_name}"
 
+    # No explicit height - SwiftDialog auto-sizes based on content
     dialog_config = {
         "title": title,
         "titlefont": "size=18",
@@ -2612,9 +2580,7 @@ def show_rename_tabs_dialog(
         "textfield": textfields,
         "button1text": "Save",
         "button2text": "Cancel",
-        "infobuttontext": "Filter",  # Trigger re-filter
-        "height": str(dialog_height),
-        "width": "750",
+        "width": "700",
         "moveable": True,
         "ontop": True,
         "json": True
@@ -2624,44 +2590,11 @@ def show_rename_tabs_dialog(
         "Showing rename dialog",
         operation="show_rename_tabs_dialog",
         category=category_name,
-        item_count=len(items),
-        dialog_height=dialog_height
+        item_count=len(items)
     )
 
     # Run dialog
     return_code, output = run_swiftdialog(dialog_config)
-
-    if return_code == 3:
-        # Info button clicked - user wants to filter
-        # Get the search value and recursively call with filter applied
-        if output:
-            new_filter = output.get("search_filter", "").strip().lower()
-            if new_filter:
-                # Filter items by search term
-                filtered_items = [
-                    i for i in items
-                    if new_filter in (i.get("dir") or i.get("path", "")).lower()
-                    or new_filter in (i.get("name", "")).lower()
-                    or new_filter in custom_names.get(
-                        i.get("dir") or i.get("path", ""), ""
-                    ).lower()
-                ]
-                if filtered_items:
-                    logger.info(
-                        "Applying search filter",
-                        filter=new_filter,
-                        matched=len(filtered_items),
-                        operation="show_rename_tabs_dialog"
-                    )
-                    # Recursive call with filtered items
-                    return show_rename_tabs_dialog(
-                        filtered_items,
-                        custom_names,
-                        category_name,
-                        new_filter
-                    )
-        # No valid filter, re-show same dialog
-        return show_rename_tabs_dialog(items, custom_names, category_name, None)
 
     if return_code != 0:
         logger.debug(
@@ -3242,50 +3175,94 @@ async def show_tab_customization(
 
             # Check if rename was requested
             if result == "RENAME_REQUESTED":
-                # Build items list for rename dialog from all inputs
+                # Build items list with category tags for all inputs
                 items_to_rename = []
                 for tab in layout_tabs:
                     items_to_rename.append({
-                        "path": tab.get("dir", ""),
-                        "name": tab.get("name", os.path.basename(tab.get("dir", "")))
+                        "dir": tab.get("dir", ""),
+                        "name": tab.get("name", os.path.basename(tab.get("dir", ""))),
+                        "category": "Layout Tabs"
                     })
                 for wt in worktrees:
                     items_to_rename.append({
-                        "path": wt.get("dir", ""),
-                        "name": wt.get("name", "")
+                        "dir": wt.get("dir", ""),
+                        "name": wt.get("name", ""),
+                        "category": "Git Worktrees"
                     })
                 for repo in additional_repos:
                     items_to_rename.append({
-                        "path": repo.get("dir", ""),
-                        "name": repo.get("name", "")
+                        "dir": repo.get("dir", ""),
+                        "name": repo.get("name", ""),
+                        "category": "Additional Repos"
                     })
                 for folder in untracked_folders:
                     items_to_rename.append({
-                        "path": folder.get("dir", ""),
-                        "name": folder.get("name", "")
+                        "dir": folder.get("dir", ""),
+                        "name": folder.get("name", ""),
+                        "category": "Untracked Folders"
                     })
 
                 # Filter out items without paths
-                items_to_rename = [i for i in items_to_rename if i["path"]]
+                items_to_rename = [i for i in items_to_rename if i.get("dir")]
 
-                new_names = await loop.run_in_executor(
+                # Build category list with counts
+                from collections import Counter
+                category_counts = Counter(i["category"] for i in items_to_rename)
+                categories = [
+                    {
+                        "name": "Layout Tabs",
+                        "count": category_counts.get("Layout Tabs", 0),
+                        "icon": CATEGORY_ICONS["layout_tab"]
+                    },
+                    {
+                        "name": "Git Worktrees",
+                        "count": category_counts.get("Git Worktrees", 0),
+                        "icon": CATEGORY_ICONS["git_worktree"]
+                    },
+                    {
+                        "name": "Additional Repos",
+                        "count": category_counts.get("Additional Repos", 0),
+                        "icon": CATEGORY_ICONS["additional_repo"]
+                    },
+                    {
+                        "name": "Untracked Folders",
+                        "count": category_counts.get("Untracked Folders", 0),
+                        "icon": CATEGORY_ICONS["untracked"]
+                    },
+                ]
+
+                # Show category selector
+                selected_category = await loop.run_in_executor(
                     None,
-                    partial(show_rename_tabs_dialog, items_to_rename, custom_tab_names)
+                    partial(show_category_selector_dialog, categories)
                 )
 
-                if new_names:
-                    # Update custom_tab_names with new values
-                    custom_tab_names.update(new_names)
-
-                    # Save preferences if callback provided
-                    if save_preferences_callback:
-                        save_preferences_callback(custom_tab_names)
-
-                    logger.info(
-                        "Tab names updated",
-                        renamed_count=len(new_names),
-                        operation="show_tab_customization"
+                if selected_category:
+                    # Show rename dialog filtered to selected category
+                    new_names = await loop.run_in_executor(
+                        None,
+                        partial(
+                            show_rename_tabs_dialog,
+                            items_to_rename,
+                            custom_tab_names,
+                            selected_category  # category_name filter
+                        )
                     )
+
+                    if new_names:
+                        # Update custom_tab_names with new values
+                        custom_tab_names.update(new_names)
+
+                        # Save preferences if callback provided
+                        if save_preferences_callback:
+                            save_preferences_callback(custom_tab_names)
+
+                        logger.info(
+                            "Tab names updated",
+                            renamed_count=len(new_names),
+                            category=selected_category,
+                            operation="show_tab_customization"
+                        )
 
                 # Re-show main dialog with updated names
                 continue
