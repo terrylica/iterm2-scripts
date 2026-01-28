@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/terrylica/iterm2-scripts/compare/v2.0.2...v2.1.0) (2026-01-28)
+
+
+### Features
+
+* **dialogs:** improve rename dialog layout and add bidirectional pagination ([87cea59](https://github.com/terrylica/iterm2-scripts/commit/87cea597737ac992a1440ba2bbde60437710c481))
+
 ## [2.0.2](https://github.com/terrylica/iterm2-scripts/compare/v2.0.1...v2.0.2) (2026-01-28)
 
 
