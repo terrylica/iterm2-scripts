@@ -8,6 +8,30 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")" && pwd)"
 
 # ============================================================================
+# PATH Augmentation for iTerm2 Semantic History
+# ============================================================================
+# iTerm2 Semantic History "Run command" spawns processes with a minimal macOS PATH
+# (typically /usr/bin:/bin:/usr/sbin:/sbin). Tools like fd, broot, etc. installed via
+# Homebrew are at /opt/homebrew/bin and won't be found.
+# Mirror the same augmentation as src/_header.py (ADR: 2026-01-17-iterm2-path-augmentation).
+_ADDITIONAL_PATHS=(
+    "/opt/homebrew/bin"
+    "/opt/homebrew/sbin"
+    "/usr/local/bin"
+    "/usr/local/sbin"
+    "$HOME/.local/bin"
+    "$HOME/bin"
+    "$HOME/.cargo/bin"
+    "$HOME/.local/share/mise/shims"
+)
+for _p in "${_ADDITIONAL_PATHS[@]}"; do
+    if [[ -d "$_p" ]] && [[ ":$PATH:" != *":$_p:"* ]]; then
+        export PATH="$_p:$PATH"
+    fi
+done
+unset _p _ADDITIONAL_PATHS
+
+# ============================================================================
 # Helper Functions (DRY)
 # ============================================================================
 
@@ -18,7 +42,7 @@ find_git_root() {
     local start_dir="$1"
     local check_dir="$start_dir"
     while [[ "$check_dir" != "/" ]] && [[ "$check_dir" != "$HOME" ]]; do
-        if [[ -d "$check_dir/.git" ]]; then
+        if [[ -d "$check_dir/.git" ]] || [[ -f "$check_dir/.git" ]]; then
             echo "$check_dir"
             return 0
         fi
@@ -40,7 +64,7 @@ collect_workspace_roots() {
 
     # Walk up looking for markers
     while [[ "$check_dir" != "/" ]] && [[ "$check_dir" != "$HOME" ]]; do
-        if [[ -f "$check_dir/CLAUDE.md" ]] || [[ -d "$check_dir/.git" ]]; then
+        if [[ -f "$check_dir/CLAUDE.md" ]] || [[ -d "$check_dir/.git" ]] || [[ -f "$check_dir/.git" ]]; then
             echo "$check_dir"
         fi
         check_dir="$(dirname "$check_dir")"
@@ -56,13 +80,23 @@ deep_search_file() {
     local filename
     filename=$(basename "$pattern")
 
-    # Try full path pattern first (-H for hidden dirs, --no-ignore to search gitignored paths)
-    local result
-    result=$(fd -H --no-ignore --type f --full-path "$pattern" "$search_root" 2>/dev/null | head -1)
+    local result=""
 
-    if [[ -z "$result" ]]; then
-        # Try just filename
-        result=$(fd -H --no-ignore --type f "^${filename}$" "$search_root" 2>/dev/null | head -1)
+    if command -v fd &>/dev/null; then
+        # Try full path pattern first (-H for hidden dirs, --no-ignore to search gitignored paths)
+        result=$(fd -H --no-ignore --type f --full-path "$pattern" "$search_root" 2>/dev/null | head -1)
+
+        if [[ -z "$result" ]]; then
+            # Try just filename
+            result=$(fd -H --no-ignore --type f "^${filename}$" "$search_root" 2>/dev/null | head -1)
+        fi
+    else
+        # Fallback: use find (always available at /usr/bin/find)
+        result=$(/usr/bin/find "$search_root" -type f -path "*/$pattern" -print 2>/dev/null | head -1)
+
+        if [[ -z "$result" ]]; then
+            result=$(/usr/bin/find "$search_root" -type f -name "$filename" -print 2>/dev/null | head -1)
+        fi
     fi
 
     echo "$result"
@@ -483,8 +517,10 @@ if [[ -n "$LINE_NUM" ]]; then
 else
     echo "$(date): Opening in new iTerm2 window with Helix" >> "$LOG_FILE"
 fi
-"$SCRIPT_DIR/open-in-helix" "$resolved_path" "$LINE_NUM" "$COL_NUM"
-
-RESULT=$?
+if "$SCRIPT_DIR/open-in-helix" "$resolved_path" "$LINE_NUM" "$COL_NUM"; then
+    RESULT=0
+else
+    RESULT=$?
+fi
 echo "$(date): Completed with exit code: $RESULT" >> "$LOG_FILE"
 exit $RESULT
