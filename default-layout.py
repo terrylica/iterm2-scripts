@@ -2440,6 +2440,9 @@ def show_category_selector_dialog(
             "checked": False
         })
 
+    # Height: ~140px overhead + ~40px per checkbox item
+    dialog_height = 140 + len(non_empty) * 40
+
     dialog_config = {
         "title": "Select Category to Edit",
         "titlefont": "size=18",
@@ -2451,6 +2454,7 @@ def show_category_selector_dialog(
         "checkboxstyle": {"style": "switch", "size": "small"},
         "button1text": "Edit Selected",
         "button2text": "Cancel",
+        "height": str(dialog_height),
         "width": "600",
         "moveable": True,
         "ontop": True,
@@ -2519,7 +2523,15 @@ def show_rename_tabs_dialog(
     Show dialog to edit shorthand names for tabs.
 
     When category_name is provided, only shows items in that category.
-    Dialog auto-sizes height based on content (no explicit height parameter).
+
+    SwiftDialog textfields are NOT scrollable (TextEntryView uses plain VStack,
+    no NSScrollView). Height is calculated explicitly to fit all fields.
+    If items exceed screen capacity, they are paginated automatically.
+
+    Height formula: message_overhead(200) + items * per_item(45) + buttons(60).
+    Message overhead covers title bar + explanatory message text area.
+    The message area always occupies space in SwiftDialog's layout, so we fill
+    it with explanatory text rather than leaving it as a blank gap.
 
     Args:
         items: List of dicts with "dir"/"path", "name", and optional "category" keys
@@ -2548,92 +2560,165 @@ def show_rename_tabs_dialog(
         )
         return None
 
-    # Build text fields for each item
-    textfields = []
-    for item in items:
-        path = item.get("dir") or item.get("path", "")
-        # Use custom name if set, otherwise use item's current name
-        current_name = custom_names.get(path) or item.get("name", os.path.basename(path))
+    # Height calculation constants
+    # SwiftDialog textfields: ~45px per field (measured empirically)
+    # Message area: ~200px (title bar + explanatory text + padding)
+    # Buttons: ~60px (Cancel + Save row)
+    per_item_height = 45
+    message_overhead = 200
+    buttons_height = 60
 
-        # Display path with ~ for home directory
-        path_display = path.replace(str(Path.home()), "~")
+    # Determine max dialog height from screen size
+    try:
+        screen = NSScreen.mainScreen()
+        if screen:
+            screen_height = int(screen.frame().size.height)
+            max_dialog_height = int(screen_height * 0.80)
+        else:
+            max_dialog_height = 900
+    except (AttributeError, TypeError, ValueError):
+        max_dialog_height = 900
 
-        textfields.append({
-            "title": path_display,
-            "value": current_name,
-            "prompt": "Shorthand"
-        })
-
-    # Build title with category info
-    title = "Rename Tabs"
-    if category_name:
-        title = f"Rename: {category_name}"
-
-    # No explicit height - SwiftDialog auto-sizes based on content
-    dialog_config = {
-        "title": title,
-        "titlefont": "size=18",
-        "message": f"Edit shorthand names ({len(items)} items):",
-        "messagefont": "size=14",
-        "appearance": "dark",
-        "hideicon": True,
-        "textfield": textfields,
-        "button1text": "Save",
-        "button2text": "Cancel",
-        "width": "700",
-        "moveable": True,
-        "ontop": True,
-        "json": True
-    }
-
-    logger.info(
-        "Showing rename dialog",
-        operation="show_rename_tabs_dialog",
-        category=category_name,
-        item_count=len(items)
+    max_items_per_page = max(
+        (max_dialog_height - message_overhead - buttons_height) // per_item_height, 3
     )
 
-    # Run dialog
-    return_code, output = run_swiftdialog(dialog_config)
+    # Paginate if items exceed screen capacity
+    # Navigation: Next (button1, rc=0), Cancel (button2, rc=2), Back (info button, rc=3)
+    all_results = {}
+    total_items = len(items)
+    total_pages = (total_items + max_items_per_page - 1) // max_items_per_page
+    current_page = 0  # 0-indexed
 
-    if return_code != 0:
-        logger.debug(
-            "Rename dialog cancelled",
-            return_code=return_code,
-            operation="show_rename_tabs_dialog"
+    # Explanatory message fills the message area that SwiftDialog always
+    # allocates. Without text, this area appears as a blank gap.
+    message_text = (
+        "Each row shows a directory path on the left and its "
+        "short name on the right.\n\n"
+        "The short name is what you will see in the iTerm2 tab bar. "
+        "By default, it uses the folder name (e.g. \"repo-00\"). "
+        "You can change it to anything you like \u2014 for example, "
+        "rename \"alpha-forge-platform\" to \"AFP\" so the tab is "
+        "easier to read at a glance.\n\n"
+        "Changes are saved to your preferences and persist across "
+        "iTerm2 restarts."
+    )
+
+    while 0 <= current_page < total_pages:
+        start = current_page * max_items_per_page
+        end = min(start + max_items_per_page, total_items)
+        page_items = items[start:end]
+        page_num = current_page + 1  # 1-indexed for display
+
+        # Build text fields — use previously-edited values from all_results
+        textfields = []
+        for item in page_items:
+            path = item.get("dir") or item.get("path", "")
+            # Priority: edits from this session > saved custom names > item name
+            current_name = (
+                all_results.get(path)
+                or custom_names.get(path)
+                or item.get("name", os.path.basename(path))
+            )
+            path_display = path.replace(str(Path.home()), "~")
+
+            textfields.append({
+                "title": path_display,
+                "value": current_name,
+                "prompt": "Shorthand"
+            })
+
+        # Build title with category and page info
+        title = "Rename Tabs"
+        if category_name:
+            title = f"Rename: {category_name}"
+        title = f"{title} ({total_items} items)"
+        if total_pages > 1:
+            title = f"{title} \u2014 Page {page_num}/{total_pages}"
+
+        # Calculate exact height for this page's content
+        dialog_height = message_overhead + len(page_items) * per_item_height + buttons_height
+
+        # Button layout:
+        #   button1 (rc=0): "Next" on non-last pages, "Save" on last page
+        #   button2 (rc=2): "Cancel" always
+        #   infobuttontext (rc=3): "Back" on pages after the first
+        is_last_page = page_num >= total_pages
+        button1 = "Save" if is_last_page else "Next"
+
+        dialog_config = {
+            "title": title,
+            "titlefont": "size=16",
+            "message": message_text,
+            "messagefont": "size=15",
+            "messagealignment": "left",
+            "appearance": "dark",
+            "hideicon": True,
+            "textfield": textfields,
+            "button1text": button1,
+            "button2text": "Cancel",
+            "height": str(dialog_height),
+            "width": "700",
+            "moveable": True,
+            "ontop": True,
+            "json": True
+        }
+
+        # Add Back button on pages after the first
+        if current_page > 0:
+            dialog_config["infobuttontext"] = "Back"
+
+        logger.info(
+            "Showing rename dialog",
+            operation="show_rename_tabs_dialog",
+            category=category_name,
+            item_count=len(page_items),
+            page=page_num,
+            total_pages=total_pages,
+            dialog_height=dialog_height
         )
-        return None
 
-    if not output:
-        logger.warning(
-            "No output from rename dialog",
-            operation="show_rename_tabs_dialog"
-        )
-        return None
+        # Run dialog
+        return_code, output = run_swiftdialog(dialog_config)
 
-    # Parse output - SwiftDialog returns text field values
-    # Output format: {"<path_display>": "<value>", "search_filter": "...", ...}
-    result = {}
-    for item in items:
-        path = item.get("dir") or item.get("path", "")
-        path_display = path.replace(str(Path.home()), "~")
+        # Collect edits from this page regardless of navigation direction
+        if output:
+            for item in page_items:
+                path = item.get("dir") or item.get("path", "")
+                path_display = path.replace(str(Path.home()), "~")
+                if path_display in output:
+                    new_name = output[path_display].strip()
+                    if new_name:
+                        all_results[path] = new_name
+                    else:
+                        all_results[path] = os.path.basename(path)
 
-        if path_display in output:
-            new_name = output[path_display].strip()
-            if new_name:
-                result[path] = new_name
-            else:
-                # Empty name - use basename as fallback
-                result[path] = os.path.basename(path)
+        if return_code == 0:
+            # Next / Save pressed
+            if is_last_page:
+                break  # Save and exit
+            current_page += 1
+        elif return_code == 3:
+            # Back (info button) pressed
+            current_page = max(0, current_page - 1)
+        else:
+            # Cancel (rc=2) or other
+            logger.debug(
+                "Rename dialog cancelled",
+                return_code=return_code,
+                page=page_num,
+                operation="show_rename_tabs_dialog"
+            )
+            return all_results if all_results else None
 
     logger.info(
         "Rename dialog completed",
-        renamed_count=len(result),
+        renamed_count=len(all_results),
         category=category_name,
         operation="show_rename_tabs_dialog"
     )
 
-    return result
+    return all_results if all_results else None
 
 
 def show_tab_customization_swiftdialog(

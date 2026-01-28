@@ -159,7 +159,7 @@ macOS application for opening text files in Helix editor via iTerm2.
 
 ```
 /Applications/TextHelix.app/Contents/Resources/script
-  → ~/eon/iterm2-scripts/bin/texthelix-handler
+  → <clone-path>/bin/texthelix-handler
 ```
 
 ---
