@@ -10,9 +10,10 @@
 # 1. Validates Python 3.11+ is installed
 # 2. Checks uv package manager is installed
 # 3. Installs required Python packages
-# 4. Creates config directory (~/.config/workspace-launcher/)
-# 5. Creates AutoLaunch symlink
-# 6. Copies example config if none exists
+# 4. Installs Homebrew packages (swiftdialog, broot)
+# 5. Creates config directory (~/.config/workspace-launcher/)
+# 6. Creates AutoLaunch symlink
+# 7. Copies example config if none exists
 #
 # For Claude Code CLI: This script is safe to run autonomously.
 # =============================================================================
@@ -102,7 +103,32 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# Step 4: Create config directory
+# Step 4: Install Homebrew packages (swiftdialog, broot)
+# -----------------------------------------------------------------------------
+info "Checking required Homebrew packages..."
+
+if command -v brew &> /dev/null; then
+    MISSING_BREW=()
+
+    command -v dialog &> /dev/null || MISSING_BREW+=("swiftdialog")
+    command -v broot &> /dev/null || MISSING_BREW+=("broot")
+
+    if [ ${#MISSING_BREW[@]} -ne 0 ]; then
+        warn "Missing Homebrew packages: ${MISSING_BREW[*]}"
+        info "Installing with brew..."
+        brew install "${MISSING_BREW[@]}"
+        success "Homebrew packages installed"
+    else
+        success "swiftdialog and broot present"
+    fi
+else
+    warn "Homebrew not found - install manually:"
+    echo "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+    echo "  Then: brew install swiftdialog broot"
+fi
+
+# -----------------------------------------------------------------------------
+# Step 5: Create config directory
 # -----------------------------------------------------------------------------
 info "Checking config directory..."
 
@@ -114,7 +140,7 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# Step 5: Create AutoLaunch symlink
+# Step 6: Create AutoLaunch symlink
 # -----------------------------------------------------------------------------
 info "Checking AutoLaunch symlink..."
 
@@ -152,7 +178,7 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# Step 6: Copy example config if none exists
+# Step 7: Copy example config if none exists
 # -----------------------------------------------------------------------------
 info "Checking workspace configuration..."
 
@@ -207,7 +233,7 @@ echo "     $CONFIG_DIR/workspace-default.toml"
 echo ""
 echo "  3. Restart iTerm2"
 echo ""
-echo "Optional enhancements:"
-echo "  - brew install swiftdialog  (better UI for workspace selection)"
-echo "  - brew install broot        (file navigator in left pane)"
+echo "Required tools (if not already installed):"
+echo "  brew install swiftdialog  (workspace selector dialogs)"
+echo "  brew install broot        (file navigator for left pane)"
 echo ""

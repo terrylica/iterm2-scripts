@@ -88,12 +88,14 @@ dir = "~/projects"
 - **Migration Support**: Automatically migrates from legacy `~/.config/iterm2/` path
 - **SwiftDialog UI**: Enhanced dialogs when SwiftDialog is installed
 
-## Optional Enhancements
+## Required Homebrew Packages
 
 ```bash
-brew install swiftdialog  # Better UI for workspace selection
+brew install swiftdialog  # Workspace selector and tab customization dialogs
 brew install broot        # File navigator for left pane
 ```
+
+These are installed automatically by `setup.sh` if Homebrew is available.
 
 ## For Claude Code CLI Users
 

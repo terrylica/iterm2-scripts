@@ -135,10 +135,10 @@ src/
 
 - iterm2, pyobjc, loguru, platformdirs
 
-**Homebrew** (optional):
+**Homebrew** (required):
 
-- broot (file navigator)
-- swiftdialog (enhanced dialogs)
+- swiftdialog (workspace selector and tab customization dialogs)
+- broot (file navigator for left pane)
 
 ---
 

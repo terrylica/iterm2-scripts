@@ -2777,9 +2777,9 @@ async def run_first_run_wizard(connection, window) -> bool:
             f"Your layout config has been created:\n"
             f"{layout_path}\n\n"
             "Edit this file to add more workspace tabs.\n\n"
-            "Optional enhancements:\n"
+            "Required tools (install via Homebrew):\n"
             "• brew install broot (file navigator)\n"
-            "• brew install swiftdialog (better UI)",
+            "• brew install swiftdialog (workspace dialogs)",
             window_id=window.window_id
         )
         complete_alert.add_button("OK")
