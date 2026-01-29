@@ -1,3 +1,10 @@
+## [3.0.1](https://github.com/terrylica/iterm2-scripts/compare/v3.0.0...v3.0.1) (2026-01-29)
+
+
+### Bug Fixes
+
+* **setup:** mark swiftdialog and broot as required dependencies ([72f4c56](https://github.com/terrylica/iterm2-scripts/commit/72f4c5609b490fbd39dea44e11771f64830616c6))
+
 # [3.0.0](https://github.com/terrylica/iterm2-scripts/compare/v2.2.0...v3.0.0) (2026-01-29)
 
 
