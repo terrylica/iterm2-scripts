@@ -2,7 +2,7 @@
 
 iTerm2 workspace automation using the official Python API.
 
-**Updated**: 2026-01-27
+**Updated**: 2026-01-29
 
 ---
 
@@ -37,28 +37,35 @@ cd iterm2-scripts && bash setup.sh
 
 ## Architecture
 
-**Build concatenation pattern**: Modular `src/*.py` -> Single `default-layout.py`
+**Build concatenation pattern**: Modular `src/*.py` -> Single `workspace-launcher.py`
 
 iTerm2 AutoLaunch requires a single `.py` file. Source is modular for maintainability:
 
 ```
 src/
-├── _header.py       # PEP 723 metadata + imports
-├── logging_setup.py # Loguru configuration
-├── result.py        # Result[T] monad
-├── config.py        # TOML parsing + shell resolution
-├── preferences.py   # User preferences persistence
-├── discovery.py     # Git worktree + repo discovery
-├── dialogs.py       # SwiftDialog + iTerm2 Alert UI
-├── panes.py         # Pane creation + command execution
-└── main.py          # Entry point + orchestration
+├── _header.py           # PEP 723 metadata + imports
+├── logging_config.py    # Loguru configuration
+├── errors.py            # Error types (Result monad)
+├── config_loader.py     # TOML parsing + shell resolution
+├── preferences.py       # User preferences + workspace discovery
+├── selector.py          # Workspace selector dialog
+├── swiftdialog.py       # SwiftDialog utilities
+├── layout_toggle.py     # Workspace enable/disable
+├── scan_dirs.py         # Scan directories management
+├── setup_wizard.py      # First-run and veteran wizards
+├── tool_installer.py    # Homebrew tool installation
+├── tab_customization.py # Tab selection dialog
+├── pane_setup.py        # Pane creation + command execution
+└── main.py              # Entry point + orchestration
 ```
 
-**Build**: `python build.py` -> Concatenates to `default-layout.py`
+**Build**: `python build.py` -> Concatenates to `workspace-launcher.py`
 
-**Symlink**: `<clone-path>/default-layout.py` -> `~/Library/Application Support/iTerm2/Scripts/AutoLaunch/`
+**Symlink**: `<clone-path>/workspace-launcher.py` -> `~/Library/Application Support/iTerm2/Scripts/AutoLaunch/`
 
-**Configuration**: `~/.config/iterm2/layout-*.toml` (XDG standard)
+**Configuration**: `~/.config/workspace-launcher/workspace-*.toml`
+
+**Migration**: Existing users with `~/.config/iterm2/layout-*.toml` will be prompted to migrate.
 
 ---
 
@@ -103,7 +110,7 @@ curl https://mise.run | sh
 mise install
 
 # Run tasks
-mise run build          # Build default-layout.py from src/
+mise run build          # Build workspace-launcher.py from src/
 mise run setup          # Run setup script
 mise run test-aliases   # Test shell alias introspection
 ```
@@ -176,10 +183,10 @@ Optional scripts for iTerm2 customization. See [maintenance/README.md](./mainten
 
 ## Distribution Methods
 
-| Priority           | Method                       | Install Command            |
-| ------------------ | ---------------------------- | -------------------------- |
-| **1. PRIMARY**     | Git clone + setup.sh         | `git clone` + `./setup.sh` |
-| **2. Alternative** | Direct `uv run` with PEP 723 | `uv run default-layout.py` |
+| Priority           | Method                       | Install Command                |
+| ------------------ | ---------------------------- | ------------------------------ |
+| **1. PRIMARY**     | Git clone + setup.sh         | `git clone` + `./setup.sh`     |
+| **2. Alternative** | Direct `uv run` with PEP 723 | `uv run workspace-launcher.py` |
 
 ---
 

@@ -7,20 +7,167 @@
 # =============================================================================
 
 
+def needs_migration() -> bool:
+    """
+    Check if migration from legacy config directory is needed.
+
+    Returns True if:
+    - Legacy config directory exists with layout files
+    - New config directory doesn't exist or has no workspace files
+
+    Returns:
+        True if migration should be offered
+    """
+    # Check if legacy config exists
+    if not LEGACY_CONFIG_DIR.exists():
+        return False
+
+    # Check if legacy has layout files
+    legacy_layouts = list(LEGACY_CONFIG_DIR.glob(LEGACY_LAYOUT_PATTERN))
+    legacy_prefs = LEGACY_PREFERENCES_PATH.exists()
+
+    if not legacy_layouts and not legacy_prefs:
+        return False
+
+    # Check if new config already has workspace files
+    if CONFIG_DIR.exists():
+        new_workspaces = list(CONFIG_DIR.glob(WORKSPACE_PATTERN))
+        if new_workspaces:
+            return False  # Already migrated or new config exists
+
+    logger.debug(
+        "Migration needed from legacy config",
+        operation="needs_migration",
+        legacy_dir=str(LEGACY_CONFIG_DIR),
+        legacy_layouts=len(legacy_layouts),
+        legacy_prefs=legacy_prefs
+    )
+    return True
+
+
+def migrate_config_files() -> tuple[int, int]:
+    """
+    Migrate files from legacy to new config directory.
+
+    Renames:
+    - layout-*.toml -> workspace-*.toml
+    - selector-preferences.toml -> preferences.toml
+
+    Returns:
+        Tuple of (layouts_migrated, prefs_migrated)
+    """
+    import shutil
+
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    layouts_migrated = 0
+    prefs_migrated = 0
+
+    # Migrate layout files
+    for legacy_path in LEGACY_CONFIG_DIR.glob(LEGACY_LAYOUT_PATTERN):
+        # layout-foo.toml -> workspace-foo.toml
+        old_name = legacy_path.name
+        new_name = old_name.replace("layout-", "workspace-")
+        new_path = CONFIG_DIR / new_name
+
+        if not new_path.exists():
+            shutil.copy2(legacy_path, new_path)
+            layouts_migrated += 1
+            logger.info(
+                "Migrated layout file",
+                operation="migrate_config_files",
+                old_path=str(legacy_path),
+                new_path=str(new_path)
+            )
+
+    # Migrate preferences
+    if LEGACY_PREFERENCES_PATH.exists() and not PREFERENCES_PATH.exists():
+        shutil.copy2(LEGACY_PREFERENCES_PATH, PREFERENCES_PATH)
+        prefs_migrated = 1
+        logger.info(
+            "Migrated preferences file",
+            operation="migrate_config_files",
+            old_path=str(LEGACY_PREFERENCES_PATH),
+            new_path=str(PREFERENCES_PATH)
+        )
+
+    return layouts_migrated, prefs_migrated
+
+
+async def run_migration_wizard(connection, window) -> bool:
+    """
+    Offer migration from legacy config directory.
+
+    Args:
+        connection: iTerm2 connection
+        window: Current iTerm2 window
+
+    Returns:
+        True if migration completed, False if skipped/cancelled
+    """
+    # Count legacy files
+    legacy_layouts = list(LEGACY_CONFIG_DIR.glob(LEGACY_LAYOUT_PATTERN))
+
+    migrate_alert = iterm2.Alert(
+        "Migrate Configuration?",
+        f"Found {len(legacy_layouts)} workspace(s) in legacy location:\n"
+        f"  {LEGACY_CONFIG_DIR}\n\n"
+        f"Migrate to new location?\n"
+        f"  {CONFIG_DIR}\n\n"
+        "Your original files will be kept as backup.",
+        window_id=window.window_id
+    )
+    migrate_alert.add_button("Migrate")
+    migrate_alert.add_button("Skip")
+    response = await migrate_alert.async_run(connection)
+
+    if response == 1:  # Skip
+        logger.info(
+            "Migration skipped by user",
+            operation="run_migration_wizard",
+            status="skipped"
+        )
+        return False
+
+    # Perform migration
+    layouts_migrated, prefs_migrated = migrate_config_files()
+
+    success_alert = iterm2.Alert(
+        "Migration Complete",
+        f"Migrated {layouts_migrated} workspace(s) and "
+        f"{prefs_migrated} preference file(s).\n\n"
+        f"New location: {CONFIG_DIR}\n\n"
+        "Original files kept in legacy location.",
+        window_id=window.window_id
+    )
+    success_alert.add_button("OK")
+    await success_alert.async_run(connection)
+
+    logger.info(
+        "Migration completed",
+        operation="run_migration_wizard",
+        status="success",
+        layouts_migrated=layouts_migrated,
+        prefs_migrated=prefs_migrated
+    )
+
+    return True
+
+
 def is_first_run() -> bool:
     """
     Detect if this is the first run for a new user.
 
     Returns True if:
-    - No layout-*.toml files exist in CONFIG_DIR
+    - No workspace-*.toml files exist in CONFIG_DIR
     - No legacy layout.toml exists
-    - No selector-preferences.toml exists
+    - No preferences.toml exists
 
     Returns:
         True if this appears to be a first-time run
     """
     # Check for any layout files
-    layout_files = list(CONFIG_DIR.glob(LAYOUT_PATTERN))
+    layout_files = list(CONFIG_DIR.glob(WORKSPACE_PATTERN))
     if layout_files:
         return False
 
@@ -54,7 +201,7 @@ def generate_default_layout_content(home_dir: bool = True, project_dir: str | No
         TOML content string
     """
     lines = [
-        "# iTerm2 Layout Manager Configuration",
+        "# Workspace Launcher Configuration",
         "# Auto-generated by first-run wizard",
         "# Edit this file to customize your workspace tabs",
         "",
@@ -118,7 +265,7 @@ async def run_first_run_wizard(connection, window) -> bool:
 
     # Step 1: Welcome dialog
     welcome_alert = iterm2.Alert(
-        "Welcome to iTerm2 Layout Manager",
+        "Welcome to Workspace Launcher",
         "This tool creates workspace tabs with split panes on startup.\n\n"
         "Each tab has:\n"
         "• Left pane: File browser (narrow)\n"
@@ -176,7 +323,7 @@ async def run_first_run_wizard(connection, window) -> bool:
         project_dir=project_dir
     )
 
-    layout_path = CONFIG_DIR / "layout-default.toml"
+    layout_path = CONFIG_DIR / "workspace-default.toml"
 
     try:
         atomic_write_file(layout_path, layout_content)
@@ -228,8 +375,8 @@ async def run_setup_wizard_for_veteran(connection, window) -> bool:
     """
     Run setup wizard for veteran users (manual trigger).
 
-    Unlike first-run wizard, this creates a new layout file with a unique name
-    (layout-wizard-generated.toml) without overwriting existing configs.
+    Unlike first-run wizard, this creates a new workspace file with a unique name
+    (workspace-wizard.toml) without overwriting existing configs.
 
     Args:
         connection: iTerm2 connection
@@ -247,9 +394,9 @@ async def run_setup_wizard_for_veteran(connection, window) -> bool:
     # Step 1: Inform user about the wizard
     info_alert = iterm2.Alert(
         "Setup Wizard",
-        "This wizard will create a new layout configuration file.\n\n"
-        "Your existing layouts will not be modified.\n"
-        "The new file will be named: layout-wizard-generated.toml",
+        "This wizard will create a new workspace configuration file.\n\n"
+        "Your existing workspaces will not be modified.\n"
+        "The new file will be named: workspace-wizard.toml",
         window_id=window.window_id
     )
     info_alert.add_button("Continue")
@@ -295,7 +442,7 @@ async def run_setup_wizard_for_veteran(connection, window) -> bool:
         project_dir=project_dir
     )
 
-    layout_path = CONFIG_DIR / "layout-wizard-generated.toml"
+    layout_path = CONFIG_DIR / "workspace-wizard.toml"
 
     try:
         atomic_write_file(layout_path, layout_content)

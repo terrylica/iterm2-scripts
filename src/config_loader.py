@@ -6,16 +6,19 @@
 # Configuration Loading
 # =============================================================================
 
-# Legacy single-file config path (for backward compatibility)
-CONFIG_PATH = Path("~/.config/iterm2/layout.toml").expanduser()
-
 # =============================================================================
-# Layout Selector Configuration
+# Workspace Launcher Configuration
 # =============================================================================
 
-CONFIG_DIR = Path("~/.config/iterm2").expanduser()
-LAYOUT_PATTERN = "layout-*.toml"
-PREFERENCES_PATH = CONFIG_DIR / "selector-preferences.toml"
+CONFIG_DIR = Path("~/.config/workspace-launcher").expanduser()
+WORKSPACE_PATTERN = "workspace-*.toml"
+PREFERENCES_PATH = CONFIG_DIR / "preferences.toml"
+
+# Legacy paths (for backward compatibility / migration)
+LEGACY_CONFIG_DIR = Path("~/.config/iterm2").expanduser()
+LEGACY_LAYOUT_PATTERN = "layout-*.toml"
+LEGACY_CONFIG_PATH = LEGACY_CONFIG_DIR / "layout.toml"
+LEGACY_PREFERENCES_PATH = LEGACY_CONFIG_DIR / "selector-preferences.toml"
 
 # Default configuration - safe values that work without user config
 # Uses universally available commands (no broot, no custom tools)
@@ -286,20 +289,20 @@ def load_config() -> dict | None:
     Returns:
         dict: Merged configuration, or None if config file missing/invalid
     """
-    if not CONFIG_PATH.exists():
+    if not LEGACY_CONFIG_PATH.exists():
         return None
 
     try:
-        with open(CONFIG_PATH, "rb") as f:
+        with open(LEGACY_CONFIG_PATH, "rb") as f:
             user_config = tomllib.load(f)
         return deep_merge(DEFAULT_CONFIG, user_config)
     except tomllib.TOMLDecodeError as e:
-        error_context = extract_toml_error_context(e, CONFIG_PATH)
+        error_context = extract_toml_error_context(e, LEGACY_CONFIG_PATH)
         logger.error(
             "Invalid TOML syntax in configuration file",
             operation="load_config",
             status="failed",
-            file=str(CONFIG_PATH),
+            file=str(LEGACY_CONFIG_PATH),
             line_number=error_context["line_number"],
             line_content=error_context["line_content"],
             error=error_context["formatted_message"]

@@ -5,16 +5,16 @@
 # dependencies = ["iterm2", "pyobjc", "loguru", "platformdirs"]
 # ///
 """
-Default iTerm2 Layout Script
+Workspace Launcher for iTerm2
 Creates tabs with left/right splits (left pane narrow, right pane wide)
 Maximizes window to fill screen
 
-Configuration: ~/.config/iterm2/layout-*.toml (XDG standard)
+Configuration: ~/.config/workspace-launcher/workspace-*.toml
 Design: modular source concatenation for iTerm2 AutoLaunch
 
 Features:
-- Layout selector dialog for multiple configurations
-- Multi-layer selection: layout choice + tab customization
+- Workspace selector dialog for multiple configurations
+- Multi-layer selection: workspace choice + tab customization
 - TOML-based configuration for workspace tabs
 - Universal worktree detection (all git repos)
 - Structured JSONL logging (machine-readable)
@@ -99,7 +99,7 @@ def show_import_error_dialog(package: str, error_msg: str) -> None:
         f"uv pip install {package}\\n\\n"
         f"Error: {error_msg}"
     )
-    title = "iTerm2 Layout Manager - Import Error"
+    title = "Workspace Launcher - Import Error"
 
     # AppleScript dialog that works without any Python dependencies
     applescript = f'''

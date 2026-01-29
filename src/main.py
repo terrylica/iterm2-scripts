@@ -5,12 +5,12 @@
 
 async def main(connection):
     """
-    Main function to set up the entire layout.
+    Main function to set up the entire workspace.
 
     Flow:
     1. Check preferences for remembered choice
-    2. If no remembered choice, discover layouts and show selector
-    3. Load selected layout config
+    2. If no remembered choice, discover workspaces and show selector
+    3. Load selected workspace config
     4. Layer 2: Tab customization (optional)
     5. Create tabs with split panes
     6. Maximize window
@@ -19,7 +19,7 @@ async def main(connection):
     report = ErrorReport()
 
     logger.info(
-        "iTerm2 Layout Selector starting",
+        "Workspace Launcher starting",
         operation="main",
         status="started",
         trace_id=main_trace_id
@@ -40,6 +40,19 @@ async def main(connection):
             trace_id=main_trace_id
         )
         window = await iterm2.Window.async_create(connection)
+
+    # =========================================================================
+    # Migration from Legacy Config (if needed)
+    # =========================================================================
+
+    if needs_migration():
+        logger.info(
+            "Legacy config detected - offering migration",
+            operation="main",
+            status="migration_needed",
+            trace_id=main_trace_id
+        )
+        await run_migration_wizard(connection, window)
 
     # =========================================================================
     # First-Run Detection and Wizard
@@ -75,26 +88,26 @@ async def main(connection):
 
     if not all_layouts:
         # Fallback: Check for legacy layout.toml (backward compatibility)
-        if CONFIG_PATH.exists():
+        if LEGACY_CONFIG_PATH.exists():
             logger.info(
                 "Using legacy config",
                 operation="main",
                 status="legacy_fallback",
                 trace_id=main_trace_id,
-                config_path=str(CONFIG_PATH)
+                config_path=str(LEGACY_CONFIG_PATH)
             )
             config = load_config()
             if config is None:
                 return
             # Skip to tab creation with legacy config
-            selected_layout = {"name": "legacy", "path": CONFIG_PATH}
+            selected_layout = {"name": "legacy", "path": LEGACY_CONFIG_PATH}
         else:
             logger.error(
-                "No layout files found",
+                "No workspace files found",
                 operation="main",
                 status="failed",
                 trace_id=main_trace_id,
-                expected_location=f"{CONFIG_DIR}/layout-*.toml"
+                expected_location=f"{CONFIG_DIR}/workspace-*.toml"
             )
             return
     else:
@@ -108,7 +121,7 @@ async def main(connection):
                 if layout["name"] == last_name:
                     selected_layout = layout
                     logger.info(
-                        "Using remembered layout",
+                        "Using remembered workspace",
                         operation="main",
                         status="remembered",
                         trace_id=main_trace_id,
@@ -118,7 +131,7 @@ async def main(connection):
 
             if selected_layout is None:
                 logger.warning(
-                    "Remembered layout not found, showing selector",
+                    "Remembered workspace not found, showing selector",
                     operation="main",
                     status="remembered_not_found",
                     trace_id=main_trace_id,
@@ -134,7 +147,7 @@ async def main(connection):
 
             if selector_result is None:
                 logger.info(
-                    "Layout selection cancelled",
+                    "Workspace selection cancelled",
                     operation="main",
                     status="cancelled",
                     trace_id=main_trace_id
@@ -169,7 +182,7 @@ async def main(connection):
 
                 if action == "manage_layouts":
                     logger.info(
-                        "Opening layout management",
+                        "Opening workspace management",
                         operation="main",
                         status="manage_layouts",
                         trace_id=main_trace_id
@@ -183,7 +196,7 @@ async def main(connection):
                         disabled_layouts = prefs.get("disabled_layouts", [])
                         layouts = [layout for layout in all_layouts if layout["name"] not in disabled_layouts]
                         logger.info(
-                            "Layout visibility updated",
+                            "Workspace visibility updated",
                             operation="main",
                             status="layouts_updated",
                             trace_id=main_trace_id,
@@ -217,9 +230,9 @@ async def main(connection):
             prefs["last_layout"] = selected_layout["name"]
             save_preferences(prefs)
 
-        # Load the selected layout config
+        # Load the selected workspace config
         logger.info(
-            "Loading layout",
+            "Loading workspace",
             operation="main",
             status="loading",
             trace_id=main_trace_id,
@@ -230,7 +243,7 @@ async def main(connection):
         # Use collect_result to aggregate errors
         if not report.collect_result(config_result, "load_config"):
             logger.error(
-                "Failed to load layout config",
+                "Failed to load workspace config",
                 operation="main",
                 status="config_load_failed",
                 trace_id=main_trace_id
@@ -246,7 +259,7 @@ async def main(connection):
     tabs = config.get("tabs", [])
     if not tabs:
         logger.warning(
-            "No tabs configured in layout",
+            "No tabs configured in workspace",
             operation="main",
             status="no_tabs",
             trace_id=main_trace_id,
@@ -269,7 +282,7 @@ async def main(connection):
 
     left_pane_ratio = config["layout"]["left_pane_ratio"]
     logger.info(
-        "Creating layout",
+        "Creating workspace",
         operation="main",
         status="creating",
         trace_id=main_trace_id,
@@ -370,7 +383,7 @@ async def main(connection):
 
         if final_tabs is None:
             logger.info(
-                "Layout creation cancelled at tab customization",
+                "Workspace creation cancelled at tab customization",
                 operation="main",
                 status="cancelled",
                 trace_id=main_trace_id
@@ -495,14 +508,14 @@ async def main(connection):
     save_preferences(prefs)
 
     logger.info(
-        "Layout created successfully",
+        "Workspace created successfully",
         operation="main",
         status="complete",
         trace_id=main_trace_id
     )
 
     logger.info(
-        "Layout creation complete",
+        "Workspace creation complete",
         operation="main",
         status="success",
         trace_id=main_trace_id,

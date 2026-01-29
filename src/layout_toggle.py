@@ -3,7 +3,7 @@
 # This module is concatenated with _header.py - imports come from there
 
 # =============================================================================
-# Layout Management
+# Workspace Management
 # =============================================================================
 
 
@@ -12,18 +12,18 @@ def show_manage_layouts_swiftdialog(
     disabled_layouts: list[str]
 ) -> list[str] | None:
     """
-    Show dialog to enable/disable layouts.
+    Show dialog to enable/disable workspaces.
 
     Args:
-        layouts: List of layout dicts from discover_layouts()
-        disabled_layouts: Current list of disabled layout names
+        layouts: List of workspace dicts from discover_layouts()
+        disabled_layouts: Current list of disabled workspace names
 
     Returns:
-        Updated list of disabled layout names, or None if cancelled
+        Updated list of disabled workspace names, or None if cancelled
     """
     if not layouts:
         logger.warning(
-            "No layouts to manage",
+            "No workspaces to manage",
             operation="show_manage_layouts_swiftdialog"
         )
         return None
@@ -43,9 +43,9 @@ def show_manage_layouts_swiftdialog(
     dialog_height = min(200 + item_count * 50, 600)
 
     dialog_config = {
-        "title": "Manage Layouts",
+        "title": "Manage Workspaces",
         "titlefont": "size=18",
-        "message": "Toggle layouts to show/hide in selector:",
+        "message": "Toggle workspaces to show/hide in selector:",
         "messagefont": "size=14",
         "appearance": "dark",
         "hideicon": True,
@@ -97,10 +97,10 @@ def show_manage_layouts_swiftdialog(
             new_disabled.append(layout["name"])
 
     logger.info(
-        "Layouts updated",
+        "Workspaces updated",
         operation="show_manage_layouts_swiftdialog",
         disabled_layouts=new_disabled,
-        total_layouts=len(layouts)
+        total_workspaces=len(layouts)
     )
 
     return new_disabled
@@ -111,12 +111,12 @@ async def show_manage_layouts(
     prefs: dict
 ) -> dict | None:
     """
-    Show layout management UI and return updated preferences.
+    Show workspace management UI and return updated preferences.
 
     Uses SwiftDialog if available.
 
     Args:
-        layouts: All layouts (including disabled ones)
+        layouts: All workspaces (including disabled ones)
         prefs: Current preferences dict
 
     Returns:
@@ -124,7 +124,7 @@ async def show_manage_layouts(
     """
     if not is_swiftdialog_available():
         logger.warning(
-            "SwiftDialog not available for layout management",
+            "SwiftDialog not available for workspace management",
             operation="show_manage_layouts"
         )
         return None

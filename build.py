@@ -47,7 +47,7 @@ MODULE_ORDER = [
 ]
 
 SRC_DIR = Path(__file__).parent / "src"
-OUTPUT_FILE = Path(__file__).parent / "default-layout.py"
+OUTPUT_FILE = Path(__file__).parent / "workspace-launcher.py"
 
 # Imports that should only appear once (in _header.py)
 STDLIB_IMPORTS = {

@@ -46,14 +46,14 @@ async def show_layout_selector(
         metrics={"layouts_count": len(ordered_layouts)}
     )
 
-    # Dynamic subtitle based on layout count
+    # Dynamic subtitle based on workspace count
     if ordered_layouts:
-        subtitle = "Choose a workspace layout to load:"
+        subtitle = "Choose a workspace to load:"
     else:
-        subtitle = "No layouts enabled. Use 'Manage Layouts' to enable."
+        subtitle = "No workspaces enabled. Use 'Manage Workspaces' to enable."
 
     alert = iterm2.Alert(
-        title="Select Layout",
+        title="Select Workspace",
         subtitle=subtitle,
     )
 
@@ -69,8 +69,8 @@ async def show_layout_selector(
     # Add Scan Folders button (for directory management)
     alert.add_button("Scan Folders...")
 
-    # Add Manage Layouts button (for enabling/disabling layouts)
-    alert.add_button("Manage Layouts...")
+    # Add Manage Workspaces button (for enabling/disabling workspaces)
+    alert.add_button("Manage Workspaces...")
 
     # Add Setup Wizard button (for veteran users to re-run wizard)
     alert.add_button("Setup Wizard...")

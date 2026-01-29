@@ -5,16 +5,16 @@
 # dependencies = ["iterm2", "pyobjc", "loguru", "platformdirs"]
 # ///
 """
-Default iTerm2 Layout Script
+Workspace Launcher for iTerm2
 Creates tabs with left/right splits (left pane narrow, right pane wide)
 Maximizes window to fill screen
 
-Configuration: ~/.config/iterm2/layout-*.toml (XDG standard)
+Configuration: ~/.config/workspace-launcher/workspace-*.toml
 Design: modular source concatenation for iTerm2 AutoLaunch
 
 Features:
-- Layout selector dialog for multiple configurations
-- Multi-layer selection: layout choice + tab customization
+- Workspace selector dialog for multiple configurations
+- Multi-layer selection: workspace choice + tab customization
 - TOML-based configuration for workspace tabs
 - Universal worktree detection (all git repos)
 - Structured JSONL logging (machine-readable)
@@ -99,7 +99,7 @@ def show_import_error_dialog(package: str, error_msg: str) -> None:
         f"uv pip install {package}\\n\\n"
         f"Error: {error_msg}"
     )
-    title = "iTerm2 Layout Manager - Import Error"
+    title = "Workspace Launcher - Import Error"
 
     # AppleScript dialog that works without any Python dependencies
     applescript = f'''
@@ -336,16 +336,19 @@ class ErrorReport:
 # Configuration Loading
 # =============================================================================
 
-# Legacy single-file config path (for backward compatibility)
-CONFIG_PATH = Path("~/.config/iterm2/layout.toml").expanduser()
-
 # =============================================================================
-# Layout Selector Configuration
+# Workspace Launcher Configuration
 # =============================================================================
 
-CONFIG_DIR = Path("~/.config/iterm2").expanduser()
-LAYOUT_PATTERN = "layout-*.toml"
-PREFERENCES_PATH = CONFIG_DIR / "selector-preferences.toml"
+CONFIG_DIR = Path("~/.config/workspace-launcher").expanduser()
+WORKSPACE_PATTERN = "workspace-*.toml"
+PREFERENCES_PATH = CONFIG_DIR / "preferences.toml"
+
+# Legacy paths (for backward compatibility / migration)
+LEGACY_CONFIG_DIR = Path("~/.config/iterm2").expanduser()
+LEGACY_LAYOUT_PATTERN = "layout-*.toml"
+LEGACY_CONFIG_PATH = LEGACY_CONFIG_DIR / "layout.toml"
+LEGACY_PREFERENCES_PATH = LEGACY_CONFIG_DIR / "selector-preferences.toml"
 
 # Default configuration - safe values that work without user config
 # Uses universally available commands (no broot, no custom tools)
@@ -616,20 +619,20 @@ def load_config() -> dict | None:
     Returns:
         dict: Merged configuration, or None if config file missing/invalid
     """
-    if not CONFIG_PATH.exists():
+    if not LEGACY_CONFIG_PATH.exists():
         return None
 
     try:
-        with open(CONFIG_PATH, "rb") as f:
+        with open(LEGACY_CONFIG_PATH, "rb") as f:
             user_config = tomllib.load(f)
         return deep_merge(DEFAULT_CONFIG, user_config)
     except tomllib.TOMLDecodeError as e:
-        error_context = extract_toml_error_context(e, CONFIG_PATH)
+        error_context = extract_toml_error_context(e, LEGACY_CONFIG_PATH)
         logger.error(
             "Invalid TOML syntax in configuration file",
             operation="load_config",
             status="failed",
-            file=str(CONFIG_PATH),
+            file=str(LEGACY_CONFIG_PATH),
             line_number=error_context["line_number"],
             line_content=error_context["line_content"],
             error=error_context["formatted_message"]
@@ -712,15 +715,15 @@ def load_config_from_path(config_path: Path) -> Result[dict]:
 # This module is concatenated with _header.py - imports come from there
 
 # =============================================================================
-# Layout Selector Functions
+# Workspace Discovery Functions
 # =============================================================================
 
 
 def discover_layouts() -> list[dict]:
     """
-    Discover available layout files in config directory.
+    Discover available workspace files in config directory.
 
-    Scans CONFIG_DIR for files matching LAYOUT_PATTERN (layout-*.toml).
+    Scans CONFIG_DIR for files matching WORKSPACE_PATTERN (workspace-*.toml).
 
     Returns:
         List of dicts with keys: name, display, path, tab_count
@@ -737,10 +740,10 @@ def discover_layouts() -> list[dict]:
         status="started",
         trace_id=op_trace_id,
         config_dir=str(CONFIG_DIR),
-        pattern=LAYOUT_PATTERN
+        pattern=WORKSPACE_PATTERN
     )
 
-    for path in sorted(CONFIG_DIR.glob(LAYOUT_PATTERN)):
+    for path in sorted(CONFIG_DIR.glob(WORKSPACE_PATTERN)):
         logger.debug(
             "Found layout file",
             operation="discover_layouts",
@@ -748,8 +751,8 @@ def discover_layouts() -> list[dict]:
             file=path.name
         )
 
-        # Extract display name: layout-{name}.toml -> {name}
-        match = re.match(r"layout-(.+)\.toml$", path.name)
+        # Extract display name: workspace-{name}.toml -> {name}
+        match = re.match(r"workspace-(.+)\.toml$", path.name)
         if not match:
             logger.debug(
                 "Skipping file - doesn't match pattern",
@@ -950,8 +953,8 @@ def save_preferences(prefs: dict) -> None:
         prefs: dict with remember_choice, last_layout, scan_directories keys
     """
     lines = [
-        "# iTerm2 Layout Selector Preferences",
-        "# Auto-generated by default-layout.py",
+        "# Workspace Launcher Preferences",
+        "# Auto-generated by workspace-launcher.py",
         "# Delete this file to reset and show selector dialog again",
         "",
         f"remember_choice = {'true' if prefs.get('remember_choice') else 'false'}",
@@ -1026,10 +1029,10 @@ async def reset_preferences(connection, window) -> bool:
     """
     Reset selector preferences to defaults after user confirmation.
 
-    Deletes the selector-preferences.toml file, which will cause:
-    - Layout selector to show on next startup
+    Deletes the preferences.toml file, which will cause:
+    - Workspace selector to show on next startup
     - Scan directories to reset to defaults
-    - Remembered layout choice to be cleared
+    - Remembered workspace choice to be cleared
 
     Args:
         connection: iTerm2 connection
@@ -1041,11 +1044,11 @@ async def reset_preferences(connection, window) -> bool:
     # Confirm with user
     confirm_alert = iterm2.Alert(
         "Reset Preferences?",
-        "This will reset all layout selector preferences:\n\n"
-        "• Layout selector will show on startup\n"
+        "This will reset all workspace launcher preferences:\n\n"
+        "• Workspace selector will show on startup\n"
         "• Scan directories will be cleared\n"
         "• Tab selections will be forgotten\n\n"
-        "Layout config files will NOT be deleted.",
+        "Workspace config files will NOT be deleted.",
         window_id=window.window_id
     )
     confirm_alert.add_button("Reset")
@@ -1157,14 +1160,14 @@ async def show_layout_selector(
         metrics={"layouts_count": len(ordered_layouts)}
     )
 
-    # Dynamic subtitle based on layout count
+    # Dynamic subtitle based on workspace count
     if ordered_layouts:
-        subtitle = "Choose a workspace layout to load:"
+        subtitle = "Choose a workspace to load:"
     else:
-        subtitle = "No layouts enabled. Use 'Manage Layouts' to enable."
+        subtitle = "No workspaces enabled. Use 'Manage Workspaces' to enable."
 
     alert = iterm2.Alert(
-        title="Select Layout",
+        title="Select Workspace",
         subtitle=subtitle,
     )
 
@@ -1180,8 +1183,8 @@ async def show_layout_selector(
     # Add Scan Folders button (for directory management)
     alert.add_button("Scan Folders...")
 
-    # Add Manage Layouts button (for enabling/disabling layouts)
-    alert.add_button("Manage Layouts...")
+    # Add Manage Workspaces button (for enabling/disabling workspaces)
+    alert.add_button("Manage Workspaces...")
 
     # Add Setup Wizard button (for veteran users to re-run wizard)
     alert.add_button("Setup Wizard...")
@@ -1949,7 +1952,7 @@ def format_tab_label(path: str, name: str, wrap_threshold: int = 50) -> str:
 # This module is concatenated with _header.py - imports come from there
 
 # =============================================================================
-# Layout Management
+# Workspace Management
 # =============================================================================
 
 
@@ -1958,18 +1961,18 @@ def show_manage_layouts_swiftdialog(
     disabled_layouts: list[str]
 ) -> list[str] | None:
     """
-    Show dialog to enable/disable layouts.
+    Show dialog to enable/disable workspaces.
 
     Args:
-        layouts: List of layout dicts from discover_layouts()
-        disabled_layouts: Current list of disabled layout names
+        layouts: List of workspace dicts from discover_layouts()
+        disabled_layouts: Current list of disabled workspace names
 
     Returns:
-        Updated list of disabled layout names, or None if cancelled
+        Updated list of disabled workspace names, or None if cancelled
     """
     if not layouts:
         logger.warning(
-            "No layouts to manage",
+            "No workspaces to manage",
             operation="show_manage_layouts_swiftdialog"
         )
         return None
@@ -1989,9 +1992,9 @@ def show_manage_layouts_swiftdialog(
     dialog_height = min(200 + item_count * 50, 600)
 
     dialog_config = {
-        "title": "Manage Layouts",
+        "title": "Manage Workspaces",
         "titlefont": "size=18",
-        "message": "Toggle layouts to show/hide in selector:",
+        "message": "Toggle workspaces to show/hide in selector:",
         "messagefont": "size=14",
         "appearance": "dark",
         "hideicon": True,
@@ -2043,10 +2046,10 @@ def show_manage_layouts_swiftdialog(
             new_disabled.append(layout["name"])
 
     logger.info(
-        "Layouts updated",
+        "Workspaces updated",
         operation="show_manage_layouts_swiftdialog",
         disabled_layouts=new_disabled,
-        total_layouts=len(layouts)
+        total_workspaces=len(layouts)
     )
 
     return new_disabled
@@ -2057,12 +2060,12 @@ async def show_manage_layouts(
     prefs: dict
 ) -> dict | None:
     """
-    Show layout management UI and return updated preferences.
+    Show workspace management UI and return updated preferences.
 
     Uses SwiftDialog if available.
 
     Args:
-        layouts: All layouts (including disabled ones)
+        layouts: All workspaces (including disabled ones)
         prefs: Current preferences dict
 
     Returns:
@@ -2070,7 +2073,7 @@ async def show_manage_layouts(
     """
     if not is_swiftdialog_available():
         logger.warning(
-            "SwiftDialog not available for layout management",
+            "SwiftDialog not available for workspace management",
             operation="show_manage_layouts"
         )
         return None
@@ -2441,20 +2444,166 @@ async def show_directory_management(prefs: dict) -> dict | None:
 # =============================================================================
 
 
+def needs_migration() -> bool:
+    """
+    Check if migration from legacy config directory is needed.
+
+    Returns True if:
+    - Legacy config directory exists with layout files
+    - New config directory doesn't exist or has no workspace files
+
+    Returns:
+        True if migration should be offered
+    """
+    # Check if legacy config exists
+    if not LEGACY_CONFIG_DIR.exists():
+        return False
+
+    # Check if legacy has layout files
+    legacy_layouts = list(LEGACY_CONFIG_DIR.glob(LEGACY_LAYOUT_PATTERN))
+    legacy_prefs = LEGACY_PREFERENCES_PATH.exists()
+
+    if not legacy_layouts and not legacy_prefs:
+        return False
+
+    # Check if new config already has workspace files
+    if CONFIG_DIR.exists():
+        new_workspaces = list(CONFIG_DIR.glob(WORKSPACE_PATTERN))
+        if new_workspaces:
+            return False  # Already migrated or new config exists
+
+    logger.debug(
+        "Migration needed from legacy config",
+        operation="needs_migration",
+        legacy_dir=str(LEGACY_CONFIG_DIR),
+        legacy_layouts=len(legacy_layouts),
+        legacy_prefs=legacy_prefs
+    )
+    return True
+
+
+def migrate_config_files() -> tuple[int, int]:
+    """
+    Migrate files from legacy to new config directory.
+
+    Renames:
+    - layout-*.toml -> workspace-*.toml
+    - selector-preferences.toml -> preferences.toml
+
+    Returns:
+        Tuple of (layouts_migrated, prefs_migrated)
+    """
+
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    layouts_migrated = 0
+    prefs_migrated = 0
+
+    # Migrate layout files
+    for legacy_path in LEGACY_CONFIG_DIR.glob(LEGACY_LAYOUT_PATTERN):
+        # layout-foo.toml -> workspace-foo.toml
+        old_name = legacy_path.name
+        new_name = old_name.replace("layout-", "workspace-")
+        new_path = CONFIG_DIR / new_name
+
+        if not new_path.exists():
+            shutil.copy2(legacy_path, new_path)
+            layouts_migrated += 1
+            logger.info(
+                "Migrated layout file",
+                operation="migrate_config_files",
+                old_path=str(legacy_path),
+                new_path=str(new_path)
+            )
+
+    # Migrate preferences
+    if LEGACY_PREFERENCES_PATH.exists() and not PREFERENCES_PATH.exists():
+        shutil.copy2(LEGACY_PREFERENCES_PATH, PREFERENCES_PATH)
+        prefs_migrated = 1
+        logger.info(
+            "Migrated preferences file",
+            operation="migrate_config_files",
+            old_path=str(LEGACY_PREFERENCES_PATH),
+            new_path=str(PREFERENCES_PATH)
+        )
+
+    return layouts_migrated, prefs_migrated
+
+
+async def run_migration_wizard(connection, window) -> bool:
+    """
+    Offer migration from legacy config directory.
+
+    Args:
+        connection: iTerm2 connection
+        window: Current iTerm2 window
+
+    Returns:
+        True if migration completed, False if skipped/cancelled
+    """
+    # Count legacy files
+    legacy_layouts = list(LEGACY_CONFIG_DIR.glob(LEGACY_LAYOUT_PATTERN))
+
+    migrate_alert = iterm2.Alert(
+        "Migrate Configuration?",
+        f"Found {len(legacy_layouts)} workspace(s) in legacy location:\n"
+        f"  {LEGACY_CONFIG_DIR}\n\n"
+        f"Migrate to new location?\n"
+        f"  {CONFIG_DIR}\n\n"
+        "Your original files will be kept as backup.",
+        window_id=window.window_id
+    )
+    migrate_alert.add_button("Migrate")
+    migrate_alert.add_button("Skip")
+    response = await migrate_alert.async_run(connection)
+
+    if response == 1:  # Skip
+        logger.info(
+            "Migration skipped by user",
+            operation="run_migration_wizard",
+            status="skipped"
+        )
+        return False
+
+    # Perform migration
+    layouts_migrated, prefs_migrated = migrate_config_files()
+
+    success_alert = iterm2.Alert(
+        "Migration Complete",
+        f"Migrated {layouts_migrated} workspace(s) and "
+        f"{prefs_migrated} preference file(s).\n\n"
+        f"New location: {CONFIG_DIR}\n\n"
+        "Original files kept in legacy location.",
+        window_id=window.window_id
+    )
+    success_alert.add_button("OK")
+    await success_alert.async_run(connection)
+
+    logger.info(
+        "Migration completed",
+        operation="run_migration_wizard",
+        status="success",
+        layouts_migrated=layouts_migrated,
+        prefs_migrated=prefs_migrated
+    )
+
+    return True
+
+
 def is_first_run() -> bool:
     """
     Detect if this is the first run for a new user.
 
     Returns True if:
-    - No layout-*.toml files exist in CONFIG_DIR
+    - No workspace-*.toml files exist in CONFIG_DIR
     - No legacy layout.toml exists
-    - No selector-preferences.toml exists
+    - No preferences.toml exists
 
     Returns:
         True if this appears to be a first-time run
     """
     # Check for any layout files
-    layout_files = list(CONFIG_DIR.glob(LAYOUT_PATTERN))
+    layout_files = list(CONFIG_DIR.glob(WORKSPACE_PATTERN))
     if layout_files:
         return False
 
@@ -2488,7 +2637,7 @@ def generate_default_layout_content(home_dir: bool = True, project_dir: str | No
         TOML content string
     """
     lines = [
-        "# iTerm2 Layout Manager Configuration",
+        "# Workspace Launcher Configuration",
         "# Auto-generated by first-run wizard",
         "# Edit this file to customize your workspace tabs",
         "",
@@ -2552,7 +2701,7 @@ async def run_first_run_wizard(connection, window) -> bool:
 
     # Step 1: Welcome dialog
     welcome_alert = iterm2.Alert(
-        "Welcome to iTerm2 Layout Manager",
+        "Welcome to Workspace Launcher",
         "This tool creates workspace tabs with split panes on startup.\n\n"
         "Each tab has:\n"
         "• Left pane: File browser (narrow)\n"
@@ -2610,7 +2759,7 @@ async def run_first_run_wizard(connection, window) -> bool:
         project_dir=project_dir
     )
 
-    layout_path = CONFIG_DIR / "layout-default.toml"
+    layout_path = CONFIG_DIR / "workspace-default.toml"
 
     try:
         atomic_write_file(layout_path, layout_content)
@@ -2662,8 +2811,8 @@ async def run_setup_wizard_for_veteran(connection, window) -> bool:
     """
     Run setup wizard for veteran users (manual trigger).
 
-    Unlike first-run wizard, this creates a new layout file with a unique name
-    (layout-wizard-generated.toml) without overwriting existing configs.
+    Unlike first-run wizard, this creates a new workspace file with a unique name
+    (workspace-wizard.toml) without overwriting existing configs.
 
     Args:
         connection: iTerm2 connection
@@ -2681,9 +2830,9 @@ async def run_setup_wizard_for_veteran(connection, window) -> bool:
     # Step 1: Inform user about the wizard
     info_alert = iterm2.Alert(
         "Setup Wizard",
-        "This wizard will create a new layout configuration file.\n\n"
-        "Your existing layouts will not be modified.\n"
-        "The new file will be named: layout-wizard-generated.toml",
+        "This wizard will create a new workspace configuration file.\n\n"
+        "Your existing workspaces will not be modified.\n"
+        "The new file will be named: workspace-wizard.toml",
         window_id=window.window_id
     )
     info_alert.add_button("Continue")
@@ -2729,7 +2878,7 @@ async def run_setup_wizard_for_veteran(connection, window) -> bool:
         project_dir=project_dir
     )
 
-    layout_path = CONFIG_DIR / "layout-wizard-generated.toml"
+    layout_path = CONFIG_DIR / "workspace-wizard.toml"
 
     try:
         atomic_write_file(layout_path, layout_content)
@@ -4140,12 +4289,12 @@ async def maximize_window(window):
 
 async def main(connection):
     """
-    Main function to set up the entire layout.
+    Main function to set up the entire workspace.
 
     Flow:
     1. Check preferences for remembered choice
-    2. If no remembered choice, discover layouts and show selector
-    3. Load selected layout config
+    2. If no remembered choice, discover workspaces and show selector
+    3. Load selected workspace config
     4. Layer 2: Tab customization (optional)
     5. Create tabs with split panes
     6. Maximize window
@@ -4154,7 +4303,7 @@ async def main(connection):
     report = ErrorReport()
 
     logger.info(
-        "iTerm2 Layout Selector starting",
+        "Workspace Launcher starting",
         operation="main",
         status="started",
         trace_id=main_trace_id
@@ -4175,6 +4324,19 @@ async def main(connection):
             trace_id=main_trace_id
         )
         window = await iterm2.Window.async_create(connection)
+
+    # =========================================================================
+    # Migration from Legacy Config (if needed)
+    # =========================================================================
+
+    if needs_migration():
+        logger.info(
+            "Legacy config detected - offering migration",
+            operation="main",
+            status="migration_needed",
+            trace_id=main_trace_id
+        )
+        await run_migration_wizard(connection, window)
 
     # =========================================================================
     # First-Run Detection and Wizard
@@ -4210,26 +4372,26 @@ async def main(connection):
 
     if not all_layouts:
         # Fallback: Check for legacy layout.toml (backward compatibility)
-        if CONFIG_PATH.exists():
+        if LEGACY_CONFIG_PATH.exists():
             logger.info(
                 "Using legacy config",
                 operation="main",
                 status="legacy_fallback",
                 trace_id=main_trace_id,
-                config_path=str(CONFIG_PATH)
+                config_path=str(LEGACY_CONFIG_PATH)
             )
             config = load_config()
             if config is None:
                 return
             # Skip to tab creation with legacy config
-            selected_layout = {"name": "legacy", "path": CONFIG_PATH}
+            selected_layout = {"name": "legacy", "path": LEGACY_CONFIG_PATH}
         else:
             logger.error(
-                "No layout files found",
+                "No workspace files found",
                 operation="main",
                 status="failed",
                 trace_id=main_trace_id,
-                expected_location=f"{CONFIG_DIR}/layout-*.toml"
+                expected_location=f"{CONFIG_DIR}/workspace-*.toml"
             )
             return
     else:
@@ -4243,7 +4405,7 @@ async def main(connection):
                 if layout["name"] == last_name:
                     selected_layout = layout
                     logger.info(
-                        "Using remembered layout",
+                        "Using remembered workspace",
                         operation="main",
                         status="remembered",
                         trace_id=main_trace_id,
@@ -4253,7 +4415,7 @@ async def main(connection):
 
             if selected_layout is None:
                 logger.warning(
-                    "Remembered layout not found, showing selector",
+                    "Remembered workspace not found, showing selector",
                     operation="main",
                     status="remembered_not_found",
                     trace_id=main_trace_id,
@@ -4269,7 +4431,7 @@ async def main(connection):
 
             if selector_result is None:
                 logger.info(
-                    "Layout selection cancelled",
+                    "Workspace selection cancelled",
                     operation="main",
                     status="cancelled",
                     trace_id=main_trace_id
@@ -4304,7 +4466,7 @@ async def main(connection):
 
                 if action == "manage_layouts":
                     logger.info(
-                        "Opening layout management",
+                        "Opening workspace management",
                         operation="main",
                         status="manage_layouts",
                         trace_id=main_trace_id
@@ -4318,7 +4480,7 @@ async def main(connection):
                         disabled_layouts = prefs.get("disabled_layouts", [])
                         layouts = [layout for layout in all_layouts if layout["name"] not in disabled_layouts]
                         logger.info(
-                            "Layout visibility updated",
+                            "Workspace visibility updated",
                             operation="main",
                             status="layouts_updated",
                             trace_id=main_trace_id,
@@ -4352,9 +4514,9 @@ async def main(connection):
             prefs["last_layout"] = selected_layout["name"]
             save_preferences(prefs)
 
-        # Load the selected layout config
+        # Load the selected workspace config
         logger.info(
-            "Loading layout",
+            "Loading workspace",
             operation="main",
             status="loading",
             trace_id=main_trace_id,
@@ -4365,7 +4527,7 @@ async def main(connection):
         # Use collect_result to aggregate errors
         if not report.collect_result(config_result, "load_config"):
             logger.error(
-                "Failed to load layout config",
+                "Failed to load workspace config",
                 operation="main",
                 status="config_load_failed",
                 trace_id=main_trace_id
@@ -4381,7 +4543,7 @@ async def main(connection):
     tabs = config.get("tabs", [])
     if not tabs:
         logger.warning(
-            "No tabs configured in layout",
+            "No tabs configured in workspace",
             operation="main",
             status="no_tabs",
             trace_id=main_trace_id,
@@ -4404,7 +4566,7 @@ async def main(connection):
 
     left_pane_ratio = config["layout"]["left_pane_ratio"]
     logger.info(
-        "Creating layout",
+        "Creating workspace",
         operation="main",
         status="creating",
         trace_id=main_trace_id,
@@ -4505,7 +4667,7 @@ async def main(connection):
 
         if final_tabs is None:
             logger.info(
-                "Layout creation cancelled at tab customization",
+                "Workspace creation cancelled at tab customization",
                 operation="main",
                 status="cancelled",
                 trace_id=main_trace_id
@@ -4630,14 +4792,14 @@ async def main(connection):
     save_preferences(prefs)
 
     logger.info(
-        "Layout created successfully",
+        "Workspace created successfully",
         operation="main",
         status="complete",
         trace_id=main_trace_id
     )
 
     logger.info(
-        "Layout creation complete",
+        "Workspace creation complete",
         operation="main",
         status="success",
         trace_id=main_trace_id,
