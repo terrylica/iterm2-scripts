@@ -1,3 +1,10 @@
+# [2.2.0](https://github.com/terrylica/iterm2-scripts/compare/v2.1.1...v2.2.0) (2026-01-29)
+
+
+### Features
+
+* **dialogs:** use regular-size switch toggles and add maintenance utilities ([7301fca](https://github.com/terrylica/iterm2-scripts/commit/7301fca5d36d62e52c7e45df37a6f2a656345e65))
+
 ## [2.1.1](https://github.com/terrylica/iterm2-scripts/compare/v2.1.0...v2.1.1) (2026-01-29)
 
 
