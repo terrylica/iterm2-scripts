@@ -31,7 +31,7 @@ SECTION_MAPPING = [
     ("Shell Alias Introspection", "shell.py", 354, 683),
     ("Layout Selector Functions", "preferences.py", 684, 1056),
     ("First-Run Detection", "discovery.py", 1057, 1531),  # includes wizards
-    ("ADR: cc-skills/docs/adr/2025-12-14-alpha-forge", "discovery.py", 1532, 1666),  # worktrees
+    ("Git Worktree Detection", "discovery.py", 1532, 1666),  # worktrees
     ("Universal Worktree Detection", "discovery.py", 1667, 1980),
     ("Layer 2: Tab Customization", "dialogs.py", 1981, 2002),
     ("SwiftDialog Integration", "dialogs.py", 2003, 2683),

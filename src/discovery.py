@@ -478,8 +478,8 @@ async def show_layout_selector(connection, layouts: list[dict]) -> dict | None:
 
 
 # =============================================================================
-# Alpha-Forge Worktree Detection (Optional)
-# ADR: cc-skills/docs/adr/2025-12-14-alpha-forge-worktree-management.md
+# Git Worktree Detection (Optional)
+# Discovers worktrees using <root>.worktree-* naming convention
 # =============================================================================
 
 
@@ -487,11 +487,11 @@ def extract_slug(worktree_path: str, prefix: str) -> str:
     """
     Extract slug from worktree path.
 
-    Example: alpha-forge.worktree-2025-12-14-sharpe-statistical-validation
-             → sharpe-statistical-validation
+    Example: my-project.worktree-2025-01-15-feature-branch-name
+             → feature-branch-name
     """
     basename = os.path.basename(worktree_path)
-    # Remove prefix (e.g., "alpha-forge.worktree-")
+    # Remove prefix (e.g., "my-project.worktree-")
     if basename.startswith(prefix):
         remainder = basename[len(prefix):]
         # Remove date: YYYY-MM-DD-
@@ -506,7 +506,7 @@ def generate_acronym(slug: str) -> str:
     """
     Generate acronym from slug words.
 
-    Example: sharpe-statistical-validation → ssv
+    Example: feature-branch-name → fbn
     """
     words = slug.split("-")
     return "".join(word[0].lower() for word in words if word)
@@ -536,7 +536,7 @@ def discover_worktrees(config: dict) -> list[dict]:
     # Get pattern from config or derive from root basename
     pattern = worktree_config.get("worktree_pattern")
     if not pattern:
-        # Derive pattern from root: ~/eon/alpha-forge → alpha-forge.worktree-*
+        # Derive pattern from root: ~/projects/my-repo → my-repo.worktree-*
         root_name = os.path.basename(root)
         pattern = f"{root_name}.worktree-*"
 
@@ -596,7 +596,7 @@ def discover_worktrees(config: dict) -> list[dict]:
         return []
 
     # Filter and generate tab configs
-    # Derive prefix for slug extraction (e.g., "alpha-forge.worktree-")
+    # Derive prefix for slug extraction (e.g., "my-project.worktree-")
     root_name = os.path.basename(root)
     prefix = f"{root_name}.worktree-"
 
@@ -605,7 +605,7 @@ def discover_worktrees(config: dict) -> list[dict]:
         if path in valid_paths:
             slug = extract_slug(path, prefix)
             acronym = generate_acronym(slug)
-            # Use root basename for tab prefix (e.g., "AF" for alpha-forge)
+            # Use root basename for tab prefix (e.g., "MP" for my-project)
             tab_prefix = "".join(word[0].upper() for word in root_name.split("-") if word)
             tabs.append({"name": f"{tab_prefix}-{acronym}", "dir": path})
 

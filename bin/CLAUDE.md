@@ -135,8 +135,8 @@ Queries working directories of all iTerm2 tabs using AppleScript and shell integ
 ./bin/get-tab-directories
 
 # Output:
-# Tab 1: /Users/terryli/eon/project-a
-# Tab 2: /Users/terryli/own/scripts
+# Tab 1: /Users/username/projects/project-a
+# Tab 2: /Users/username/scripts
 # Tab 3: [unknown]
 ```
 

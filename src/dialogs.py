@@ -352,7 +352,7 @@ def show_rename_tabs_dialog(
         "The short name is what you will see in the iTerm2 tab bar. "
         "By default, it uses the folder name (e.g. \"repo-00\"). "
         "You can change it to anything you like \u2014 for example, "
-        "rename \"alpha-forge-platform\" to \"AFP\" so the tab is "
+        "rename \"my-long-project-name\" to \"MLPN\" so the tab is "
         "easier to read at a glance.\n\n"
         "Changes are saved to your preferences and persist across "
         "iTerm2 restarts."

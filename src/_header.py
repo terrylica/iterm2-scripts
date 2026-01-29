@@ -10,7 +10,7 @@ Creates tabs with left/right splits (left pane narrow, right pane wide)
 Maximizes window to fill screen
 
 Configuration: ~/.config/iterm2/layout-*.toml (XDG standard)
-ADR: cc-skills/docs/adr/2025-12-15-iterm2-layout-config.md
+Design: modular source concatenation for iTerm2 AutoLaunch
 
 Features:
 - Layout selector dialog for multiple configurations
