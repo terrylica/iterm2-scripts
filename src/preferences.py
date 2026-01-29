@@ -126,6 +126,7 @@ def load_preferences() -> dict:
         "last_layout": None,
         "scan_directories": DEFAULT_SCAN_DIRECTORIES.copy(),
         "custom_tab_names": {},  # path -> shorthand name mappings
+        "disabled_layouts": [],  # layout names to hide from selector
     }
 
     if not PREFERENCES_PATH.exists():
@@ -259,6 +260,12 @@ def save_preferences(prefs: dict) -> None:
         # Format as TOML array
         tabs_str = ", ".join(f'"{t}"' for t in prefs["last_tab_selections"])
         lines.append(f"last_tab_selections = [{tabs_str}]")
+
+    # Save disabled layouts list
+    disabled_layouts = prefs.get("disabled_layouts")
+    if disabled_layouts:
+        layouts_str = ", ".join(f'"{name}"' for name in disabled_layouts)
+        lines.append(f"disabled_layouts = [{layouts_str}]")
 
     # Save custom tab names as TOML inline table
     custom_names = prefs.get("custom_tab_names")

@@ -67,9 +67,13 @@ async def main(connection):
     # =========================================================================
 
     prefs = load_preferences()
-    layouts = discover_layouts()
+    all_layouts = discover_layouts()
 
-    if not layouts:
+    # Filter out disabled layouts for selector display
+    disabled_layouts = prefs.get("disabled_layouts", [])
+    layouts = [layout for layout in all_layouts if layout["name"] not in disabled_layouts]
+
+    if not all_layouts:
         # Fallback: Check for legacy layout.toml (backward compatibility)
         if CONFIG_PATH.exists():
             logger.info(
@@ -124,7 +128,9 @@ async def main(connection):
         # Show selector if no remembered choice or remembered layout not found
         # Loop to handle Settings action (directory management)
         while selected_layout is None:
-            selector_result = await show_layout_selector(connection, layouts)
+            selector_result = await show_layout_selector(
+                connection, layouts, last_layout=prefs.get("last_layout")
+            )
 
             if selector_result is None:
                 logger.info(
@@ -161,6 +167,32 @@ async def main(connection):
                     # Continue loop to show selector again
                     continue
 
+                if action == "manage_layouts":
+                    logger.info(
+                        "Opening layout management",
+                        operation="main",
+                        status="manage_layouts",
+                        trace_id=main_trace_id
+                    )
+                    # Show layout management dialog with ALL layouts
+                    updated_prefs = await show_manage_layouts(all_layouts, prefs)
+                    if updated_prefs is not None:
+                        prefs = updated_prefs
+                        save_preferences(prefs)
+                        # Refresh filtered layouts list
+                        disabled_layouts = prefs.get("disabled_layouts", [])
+                        layouts = [layout for layout in all_layouts if layout["name"] not in disabled_layouts]
+                        logger.info(
+                            "Layout visibility updated",
+                            operation="main",
+                            status="layouts_updated",
+                            trace_id=main_trace_id,
+                            disabled_count=len(disabled_layouts),
+                            visible_count=len(layouts)
+                        )
+                    # Continue loop to show selector again
+                    continue
+
                 if action == "run_wizard":
                     logger.info(
                         "Running setup wizard (manual trigger)",
@@ -171,7 +203,9 @@ async def main(connection):
                     # Run wizard - creates new layout file without overwriting existing
                     await run_setup_wizard_for_veteran(connection, window)
                     # Refresh layouts after wizard
-                    layouts = discover_layouts()
+                    all_layouts = discover_layouts()
+                    disabled_layouts = prefs.get("disabled_layouts", [])
+                    layouts = [layout for layout in all_layouts if layout["name"] not in disabled_layouts]
                     # Continue loop to show selector again
                     continue
 

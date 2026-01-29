@@ -30,16 +30,20 @@ from pathlib import Path
 
 # Module order (dependencies flow downward)
 MODULE_ORDER = [
-    "_header.py",
-    "logging_setup.py",
-    "result.py",
-    "config.py",        # Includes shell alias introspection
-    "preferences.py",
-    "discovery.py",
-    "swiftdialog.py",   # SwiftDialog utilities (must come before dialogs.py)
-    "dialogs.py",       # Dialog functions (uses swiftdialog.py utilities)
-    "panes.py",
-    "main.py",
+    "_header.py",           # Imports, PEP 723 metadata
+    "logging_config.py",    # Loguru structured logging
+    "errors.py",            # Error types (Result monad)
+    "config_loader.py",     # TOML config loading, shell aliases
+    "preferences.py",       # User preferences + layout discovery
+    "selector.py",          # Layout selector dialog
+    "swiftdialog.py",       # SwiftDialog utilities
+    "layout_toggle.py",     # Layout enable/disable
+    "scan_dirs.py",         # Scan directories management
+    "setup_wizard.py",      # First-run and veteran wizards
+    "tool_installer.py",    # Homebrew tool installation
+    "tab_customization.py", # Tab selection dialog
+    "pane_setup.py",        # Pane creation and commands
+    "main.py",              # Entry point
 ]
 
 SRC_DIR = Path(__file__).parent / "src"
