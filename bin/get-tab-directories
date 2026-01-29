@@ -1,0 +1,49 @@
+#!/bin/bash
+# Get working directories from all iTerm2 tabs
+# Uses iTerm2's shell integration to get the current directory
+
+echo "🔍 Detecting working directories for all tabs..."
+echo ""
+
+osascript <<'EOF' 2>/dev/null
+tell application "iTerm"
+    if (count of windows) = 0 then
+        return "No windows open"
+    end if
+
+    set currentWindow to current window
+    set output to ""
+
+    repeat with i from 1 to count of tabs of currentWindow
+        set currentTab to tab i of currentWindow
+
+        try
+            set firstSession to session 1 of currentTab
+
+            -- Get the variable user.currentDirectory if available
+            tell firstSession
+                set sessionText to get variable named "user.currentDirectory"
+                if sessionText is not missing value then
+                    set output to output & "Tab " & i & ": " & sessionText & return
+                else
+                    -- Fallback: try session.path
+                    set sessionPath to get variable named "session.path"
+                    if sessionPath is not missing value then
+                        set output to output & "Tab " & i & ": " & sessionPath & return
+                    else
+                        set output to output & "Tab " & i & ": [unknown]" & return
+                    end if
+                end if
+            end tell
+        on error errMsg
+            set output to output & "Tab " & i & ": [error: " & errMsg & "]" & return
+        end try
+    end repeat
+
+    return output
+end tell
+EOF
+
+echo ""
+echo "If directories couldn't be detected, please run 'pwd' in each tab"
+echo "and tell me the output, or just tell me what directories each tab uses."

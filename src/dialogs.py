@@ -205,7 +205,7 @@ def show_category_selector_dialog(
         "appearance": "dark",
         "hideicon": True,
         "checkbox": checkboxes,
-        "checkboxstyle": {"style": "switch", "size": "small"},
+        "checkboxstyle": {"style": "switch", "size": "regular"},
         "button1text": "Edit Selected",
         "button2text": "Cancel",
         "height": str(dialog_height),
@@ -673,13 +673,13 @@ def show_tab_customization_swiftdialog(
         "checkbox": checkboxes,
         "checkboxstyle": {
             "style": "switch",
-            "size": "small"
+            "size": "regular"
         },
         "button1text": "Open Selected",
         "button2text": "Cancel",
         "infobuttontext": "Rename Tabs",  # Info button triggers rename dialog
         "height": str(dialog_height),
-        "width": "900",  # Wider to accommodate path + shorthand labels
+        "width": "750",  # Match SwiftDialog's 700px checkbox area + padding
         "moveable": True,
         "ontop": True,
         "json": True
@@ -1267,7 +1267,7 @@ def show_directory_management_swiftdialog(
             "checkbox": checkboxes,
             "checkboxstyle": {
                 "style": "switch",
-                "size": "small"
+                "size": "regular"
             },
             "button1text": "Save",
             "button2text": "Cancel",

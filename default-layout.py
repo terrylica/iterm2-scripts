@@ -2042,20 +2042,20 @@ def discover_all_worktrees(git_repos: list[dict]) -> list[dict]:
 # =============================================================================
 
 # SF Symbol icons per category with status-based coloring
-# Format: "SF=symbol_name,colour=color_name"
+# Format: "SF=symbol_name,colour=color_name,scale=large"
 CATEGORY_ICONS = {
-    # Category icons (for selectable items)
-    "layout_tab": "SF=doc.text.fill,colour=blue",
-    "git_worktree": "SF=arrow.triangle.branch,colour=purple",
-    "additional_repo": "SF=folder.fill,colour=green",
-    "untracked": "SF=questionmark.folder,colour=orange",
+    # Category icons (for selectable items) - large scale for visibility
+    "layout_tab": "SF=doc.text.fill,colour=blue,scale=large",
+    "git_worktree": "SF=arrow.triangle.branch,colour=purple,scale=large",
+    "additional_repo": "SF=folder.fill,colour=green,scale=large",
+    "untracked": "SF=questionmark.folder,colour=orange,scale=large",
     # Status variants
-    "missing_path": "SF=folder.fill,colour=red",
+    "missing_path": "SF=folder.fill,colour=red,scale=large",
     # Header icons (for disabled category separators)
-    "header_layout": "SF=doc.text,colour=gray",
-    "header_worktree": "SF=arrow.triangle.branch,colour=gray",
-    "header_repo": "SF=folder,colour=gray",
-    "header_untracked": "SF=questionmark.folder,colour=gray",
+    "header_layout": "SF=doc.text,colour=gray,scale=large",
+    "header_worktree": "SF=arrow.triangle.branch,colour=gray,scale=large",
+    "header_repo": "SF=folder,colour=gray,scale=large",
+    "header_untracked": "SF=questionmark.folder,colour=gray,scale=large",
 }
 
 # Cached SwiftDialog path (None = not checked yet, False = not found)
@@ -2216,29 +2216,32 @@ def run_swiftdialog(config: dict) -> tuple[int, dict | None]:
                 )
 
 
-def format_tab_label(path: str, name: str, path_width: int = 40) -> str:
+def format_tab_label(path: str, name: str, wrap_threshold: int = 50) -> str:
     """
-    Format tab label as 'path  shorthand' with aligned columns.
+    Format tab label as 'shorthand (path)' with shorthand name prominent.
 
-    Path is displayed on the LEFT, shorthand on the RIGHT for consistency
-    with the rename dialog where editable fields are on the right.
+    If path exceeds wrap_threshold characters, it wraps to a second line
+    to avoid clipping by SwiftDialog's 700px checkbox area limit.
+
+    Note: SwiftDialog checkbox area is hardcoded to 700px max width in its
+    source code (dataEntryMaxWidth in MessageContentView.swift).
 
     Args:
         path: Directory path (will be shortened with ~ for home)
-        name: Shorthand name
-        path_width: Width for path column (default 40)
+        name: Shorthand name (displayed first, prominently)
+        wrap_threshold: Path length at which to wrap to second line (default 50)
 
     Returns:
-        Formatted label string
+        Formatted label string: "shorthand (path)" or "shorthand\\n(path)" if long
     """
     # Replace home directory with ~
     path_display = path.replace(str(Path.home()), "~")
 
-    # Truncate long paths with ... prefix
-    if len(path_display) > path_width:
-        path_display = "..." + path_display[-(path_width - 3):]
+    # Wrap long paths to second line to avoid clipping
+    if len(path_display) > wrap_threshold:
+        return f"{name}\n({path_display})"
 
-    return f"{path_display:<{path_width}}  {name}"
+    return f"{name} ({path_display})"
 
 # =============================================================================
 # Module: dialogs.py
@@ -2451,7 +2454,7 @@ def show_category_selector_dialog(
         "appearance": "dark",
         "hideicon": True,
         "checkbox": checkboxes,
-        "checkboxstyle": {"style": "switch", "size": "small"},
+        "checkboxstyle": {"style": "switch", "size": "regular"},
         "button1text": "Edit Selected",
         "button2text": "Cancel",
         "height": str(dialog_height),
@@ -2919,13 +2922,13 @@ def show_tab_customization_swiftdialog(
         "checkbox": checkboxes,
         "checkboxstyle": {
             "style": "switch",
-            "size": "small"
+            "size": "regular"
         },
         "button1text": "Open Selected",
         "button2text": "Cancel",
         "infobuttontext": "Rename Tabs",  # Info button triggers rename dialog
         "height": str(dialog_height),
-        "width": "900",  # Wider to accommodate path + shorthand labels
+        "width": "750",  # Match SwiftDialog's 700px checkbox area + padding
         "moveable": True,
         "ontop": True,
         "json": True
@@ -3511,7 +3514,7 @@ def show_directory_management_swiftdialog(
             "checkbox": checkboxes,
             "checkboxstyle": {
                 "style": "switch",
-                "size": "small"
+                "size": "regular"
             },
             "button1text": "Save",
             "button2text": "Cancel",
