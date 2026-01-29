@@ -46,7 +46,7 @@ uv run https://raw.githubusercontent.com/terrylica/iterm2-scripts/main/workspace
 
 - **macOS** (tested on macOS 14+)
 - **iTerm2** (version 3.5+)
-- **Python 3.11+** (`brew install python@3.11`)
+- **Python 3.13** (`brew install python@3.13`)
 - **uv** package manager (`brew install uv`)
 
 ## Setup

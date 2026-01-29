@@ -15,7 +15,7 @@ When a user clones this repository and runs Claude Code, follow these steps:
 1. **Check prerequisites**:
 
    ```bash
-   python3 --version  # Requires 3.11+
+   python3 --version  # Requires 3.13
    uv --version       # Package manager
    ```
 

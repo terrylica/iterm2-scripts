@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # ruff: noqa: F401
 # /// script
-# requires-python = ">=3.11"
+# requires-python = ">=3.13"
 # dependencies = ["iterm2", "pyobjc", "loguru", "platformdirs"]
 # ///
 """

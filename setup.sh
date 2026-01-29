@@ -7,7 +7,7 @@
 # Run: bash setup.sh (from the cloned repository)
 #
 # What it does:
-# 1. Validates Python 3.11+ is installed
+# 1. Validates Python 3.13+ is installed
 # 2. Checks uv package manager is installed
 # 3. Installs required Python packages
 # 4. Installs Homebrew packages (swiftdialog, broot)
@@ -50,7 +50,7 @@ info "Checking Python version..."
 
 if ! command -v python3 &> /dev/null; then
     error "Python 3 not found"
-    echo "  Install: brew install python@3.11"
+    echo "  Install: brew install python@3.13"
     exit 1
 fi
 
@@ -58,9 +58,9 @@ PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.v
 PYTHON_MAJOR=$(python3 -c 'import sys; print(sys.version_info.major)')
 PYTHON_MINOR=$(python3 -c 'import sys; print(sys.version_info.minor)')
 
-if [ "$PYTHON_MAJOR" -lt 3 ] || { [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 11 ]; }; then
-    error "Python 3.11+ required (current: $PYTHON_VERSION)"
-    echo "  Install: brew install python@3.11"
+if [ "$PYTHON_MAJOR" -lt 3 ] || { [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 13 ]; }; then
+    error "Python 3.13+ required (current: $PYTHON_VERSION)"
+    echo "  Install: brew install python@3.13"
     exit 1
 fi
 

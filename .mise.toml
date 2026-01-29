@@ -2,7 +2,7 @@
 # Note: Set GH_TOKEN/GITHUB_TOKEN in .mise.local.toml (gitignored) for releases
 
 [tools]
-python = "3.11"
+python = "3.13"
 uv = "latest"
 
 [tasks.setup]
@@ -14,7 +14,7 @@ description = "Test shell alias introspection"
 run = "python3 -c \"import subprocess; print(subprocess.run(['zsh', '-ic', 'alias -L'], capture_output=True, text=True, timeout=2).stdout[:500])\""
 
 [tasks.build]
-description = "Build default-layout.py from src/ modules"
+description = "Build workspace-launcher.py from src/ modules"
 run = "python build.py"
 
 [tasks.build-check]
