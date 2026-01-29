@@ -1,3 +1,10 @@
+## [3.0.2](https://github.com/terrylica/iterm2-scripts/compare/v3.0.1...v3.0.2) (2026-01-29)
+
+
+### Bug Fixes
+
+* **deps:** require Python 3.13 as minimum version ([a2766a5](https://github.com/terrylica/iterm2-scripts/commit/a2766a5cbeeef77b47c3aee6eff4649f57224fe7))
+
 ## [3.0.1](https://github.com/terrylica/iterm2-scripts/compare/v3.0.0...v3.0.1) (2026-01-29)
 
 
