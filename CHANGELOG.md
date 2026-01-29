@@ -1,3 +1,32 @@
+# [3.0.0](https://github.com/terrylica/iterm2-scripts/compare/v2.2.0...v3.0.0) (2026-01-29)
+
+
+### Features
+
+* **launcher:** rename to workspace-launcher with migration support ([52ede81](https://github.com/terrylica/iterm2-scripts/commit/52ede812ec76acd064aaf40264664b190d129eb4))
+
+
+### BREAKING CHANGES
+
+* **launcher:** Configuration paths and file naming have changed:
+- Output: default-layout.py → workspace-launcher.py
+- Config dir: ~/.config/iterm2/ → ~/.config/workspace-launcher/
+- Layout files: layout-*.toml → workspace-*.toml
+- Preferences: selector-preferences.toml → preferences.toml
+
+Features:
+- Add migration wizard for existing users (auto-detects legacy config)
+- Original files preserved as backup during migration
+- All UI text updated to use "workspace" terminology
+
+Updates:
+- Dialog titles: "Select Layout" → "Select Workspace"
+- "Manage Layouts" → "Manage Workspaces"
+- Documentation updated with new architecture
+
+SRED-Type: support-work
+SRED-Claim: WORKSPACE-LAUNCHER
+
 # [2.2.0](https://github.com/terrylica/iterm2-scripts/compare/v2.1.1...v2.2.0) (2026-01-29)
 
 
