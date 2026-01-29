@@ -1,3 +1,10 @@
+## [2.1.1](https://github.com/terrylica/iterm2-scripts/compare/v2.1.0...v2.1.1) (2026-01-29)
+
+
+### Bug Fixes
+
+* **privacy:** sanitize private project names from public source ([5d96c96](https://github.com/terrylica/iterm2-scripts/commit/5d96c96c39e7b19b624c028dbd9ee7b7f7a260f6))
+
 # [2.1.0](https://github.com/terrylica/iterm2-scripts/compare/v2.0.2...v2.1.0) (2026-01-28)
 
 
