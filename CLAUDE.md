@@ -6,6 +6,55 @@ iTerm2 workspace automation using the official Python API.
 
 ---
 
+## Agent Instructions (Claude Code CLI)
+
+When a user clones this repository and runs Claude Code, follow these steps:
+
+### First-Time Setup
+
+1. **Check prerequisites**:
+
+   ```bash
+   python3 --version  # Requires 3.11+
+   uv --version       # Package manager
+   ```
+
+2. **Run setup script** (installs dependencies, creates symlinks):
+
+   ```bash
+   bash setup.sh
+   ```
+
+3. **Verify iTerm2 Python API** is enabled:
+   - iTerm2 → Settings → General → Magic → Enable Python API
+   - If not enabled, inform user and wait for confirmation
+
+4. **Restart iTerm2** to activate the workspace launcher
+
+### Verification Commands
+
+```bash
+# Check AutoLaunch symlink exists
+ls -la ~/Library/Application\ Support/iTerm2/Scripts/AutoLaunch/workspace-launcher.py
+
+# Check config directory exists
+ls -la ~/.config/workspace-launcher/
+
+# Verify Python dependencies
+python3 -c "import iterm2, loguru, platformdirs; print('OK')"
+```
+
+### Common Tasks
+
+| Task              | Command                            |
+| ----------------- | ---------------------------------- |
+| Build from source | `python build.py`                  |
+| Run setup         | `bash setup.sh`                    |
+| Check syntax      | `ruff check workspace-launcher.py` |
+| Test locally      | Restart iTerm2                     |
+
+---
+
 ## Navigation
 
 | Topic             | Document                                         |
