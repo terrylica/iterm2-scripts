@@ -6,6 +6,78 @@
 # =============================================================================
 # Dialog Functions (Tab Customization, Directory Management)
 # =============================================================================
+# Shared Helpers
+# =============================================================================
+
+
+def _get_display_name(tab: dict, custom_tab_names: dict[str, str]) -> str:
+    """Get the display name for a tab, preferring custom name over default."""
+    path = tab.get("dir", "")
+    return custom_tab_names.get(path) or tab.get("name") or os.path.basename(path)
+
+
+def _get_max_dialog_height(screen_percent: float = 0.90, fallback: int = 900) -> int:
+    """Get maximum dialog height as a percentage of screen height."""
+    try:
+        screen = NSScreen.mainScreen()
+        if screen:
+            return int(screen.frame().size.height * screen_percent)
+    except (AttributeError, TypeError, ValueError):
+        pass
+    return fallback
+
+
+def _is_tab_selected(
+    tab: dict, category: str, remembered_selections: set[str] | None
+) -> bool:
+    """Determine if a tab should be pre-checked based on remembered selections."""
+    if remembered_selections is None:
+        return category in ("layout", "worktree")
+    name = tab.get("name", os.path.basename(tab.get("dir", "")))
+    return name in remembered_selections or tab.get("dir") in remembered_selections
+
+
+def _build_category_checkboxes(
+    items: list[dict],
+    category_key: str,
+    header_label: str,
+    header_icon: str,
+    item_icon: str,
+    custom_tab_names: dict[str, str],
+    remembered_selections: set[str] | None,
+) -> tuple[list[dict], list[dict]]:
+    """Build checkbox entries and item metadata for a category.
+
+    Returns:
+        Tuple of (checkboxes list for SwiftDialog, all_items metadata list).
+    """
+    if not items:
+        return [], []
+
+    checkboxes = [
+        {"label": header_label, "checked": False, "disabled": True, "icon": header_icon}
+    ]
+    all_items = []
+
+    for tab in items:
+        path = tab.get("dir", tab.get("path", ""))
+        name = _get_display_name(tab, custom_tab_names)
+        label = format_tab_label(path, name)
+
+        tab_path = Path(path).expanduser()
+        icon = item_icon if tab_path.exists() else CATEGORY_ICONS["missing_path"]
+
+        checkboxes.append({
+            "label": label,
+            "checked": _is_tab_selected(tab, category_key, remembered_selections),
+            "icon": icon,
+        })
+        all_items.append({"label": label, "tab": tab, "category": category_key})
+
+    return checkboxes, all_items
+
+
+# =============================================================================
 # Category Selector Dialog
 # =============================================================================
 
@@ -171,16 +243,7 @@ def show_rename_tabs_dialog(
     message_overhead = 200
     buttons_height = 60
 
-    # Determine max dialog height from screen size
-    try:
-        screen = NSScreen.mainScreen()
-        if screen:
-            screen_height = int(screen.frame().size.height)
-            max_dialog_height = int(screen_height * 0.80)
-        else:
-            max_dialog_height = 900
-    except (AttributeError, TypeError, ValueError):
-        max_dialog_height = 900
+    max_dialog_height = _get_max_dialog_height(0.80)
 
     max_items_per_page = max(
         (max_dialog_height - message_overhead - buttons_height) // per_item_height, 3
@@ -376,139 +439,30 @@ def show_tab_customization_swiftdialog(
     )
 
     # Build checkbox JSON config with categories
-    # SwiftDialog supports JSON input for complex configurations
     checkboxes = []
-    all_items = []  # Maps labels to tab dicts
-
-    # Convert last_tab_selections to a set for O(1) lookup
-    # Also include dir paths for matching (handles tabs without names)
+    all_items = []
     remembered_selections = set(last_tab_selections) if last_tab_selections else None
 
-    def is_tab_selected(tab: dict, category: str) -> bool:
-        """Determine if a tab should be pre-checked."""
-        if remembered_selections is None:
-            # No remembered selections - use category defaults
-            return category in ("layout", "worktree")
-        # Check if tab name or dir is in remembered selections
-        name = tab.get("name", os.path.basename(tab["dir"]))
-        return name in remembered_selections or tab.get("dir") in remembered_selections
-
-    # Category: Layout Tabs
-    if layout_tabs:
-        checkboxes.append({
-            "label": "—— Layout Tabs ——",
-            "checked": False,
-            "disabled": True,
-            "icon": CATEGORY_ICONS["header_layout"]
-        })
-        for tab in layout_tabs:
-            path = tab["dir"]
-            # Use custom name if set, otherwise use tab's name or basename
-            name = custom_tab_names.get(path) or tab.get("name", os.path.basename(path))
-            label = format_tab_label(path, name)
-            # Check if path exists for status indication
-            tab_path = Path(path).expanduser()
-            if tab_path.exists():
-                icon = CATEGORY_ICONS["layout_tab"]
-            else:
-                icon = CATEGORY_ICONS["missing_path"]
-            checkboxes.append({
-                "label": label,
-                "checked": is_tab_selected(tab, "layout"),
-                "icon": icon
-            })
-            all_items.append({"label": label, "tab": tab, "category": "layout"})
-
-    # Category: Worktrees
-    if worktrees:
-        checkboxes.append({
-            "label": "—— Git Worktrees ——",
-            "checked": False,
-            "disabled": True,
-            "icon": CATEGORY_ICONS["header_worktree"]
-        })
-        for wt in worktrees:
-            path = wt["dir"]
-            name = custom_tab_names.get(path) or wt["name"]
-            label = format_tab_label(path, name)
-            # Check if worktree path exists
-            wt_path = Path(path).expanduser()
-            if wt_path.exists():
-                icon = CATEGORY_ICONS["git_worktree"]
-            else:
-                icon = CATEGORY_ICONS["missing_path"]
-            checkboxes.append({
-                "label": label,
-                "checked": is_tab_selected(wt, "worktree"),
-                "icon": icon
-            })
-            all_items.append({"label": label, "tab": wt, "category": "worktree"})
-
-    # Category: Additional Repos
-    if additional_repos:
-        checkboxes.append({
-            "label": "—— Additional Repos ——",
-            "checked": False,
-            "disabled": True,
-            "icon": CATEGORY_ICONS["header_repo"]
-        })
-        for repo in additional_repos:
-            path = repo["dir"]
-            name = custom_tab_names.get(path) or repo["name"]
-            label = format_tab_label(path, name)
-            # Check if repo path exists
-            repo_path = Path(path).expanduser()
-            if repo_path.exists():
-                icon = CATEGORY_ICONS["additional_repo"]
-            else:
-                icon = CATEGORY_ICONS["missing_path"]
-            checkboxes.append({
-                "label": label,
-                "checked": is_tab_selected(repo, "discovered"),
-                "icon": icon
-            })
-            all_items.append({"label": label, "tab": repo, "category": "discovered"})
-
-    # Category: Untracked Folders - directories without .git
-    if untracked_folders:
-        checkboxes.append({
-            "label": "—— Untracked Folders ——",
-            "checked": False,
-            "disabled": True,
-            "icon": CATEGORY_ICONS["header_untracked"]
-        })
-        for folder in untracked_folders:
-            path = folder["dir"]
-            name = custom_tab_names.get(path) or folder["name"]
-            label = format_tab_label(path, name)
-            # Check if folder path exists
-            folder_path = Path(path).expanduser()
-            if folder_path.exists():
-                icon = CATEGORY_ICONS["untracked"]
-            else:
-                icon = CATEGORY_ICONS["missing_path"]
-            checkboxes.append({
-                "label": label,
-                "checked": is_tab_selected(folder, "untracked"),
-                "icon": icon
-            })
-            all_items.append({"label": label, "tab": folder, "category": "untracked"})
-
-    # Calculate dialog height as 90% of screen height
-    try:
-        screen = NSScreen.mainScreen()
-        if screen:
-            screen_height = int(screen.frame().size.height)
-            dialog_height = int(screen_height * 0.90)
-        else:
-            dialog_height = 900  # Fallback
-    except (AttributeError, TypeError, ValueError) as e:
-        logger.warning(
-            "Failed to get screen dimensions, using fallback height",
-            operation="show_tab_customization_swiftdialog",
-            error=str(e)
+    # Build all category checkboxes using shared helper
+    categories = [
+        (layout_tabs, "layout", "—— Layout Tabs ——",
+         CATEGORY_ICONS["header_layout"], CATEGORY_ICONS["layout_tab"]),
+        (worktrees, "worktree", "—— Git Worktrees ——",
+         CATEGORY_ICONS["header_worktree"], CATEGORY_ICONS["git_worktree"]),
+        (additional_repos, "discovered", "—— Additional Repos ——",
+         CATEGORY_ICONS["header_repo"], CATEGORY_ICONS["additional_repo"]),
+        (untracked_folders, "untracked", "—— Untracked Folders ——",
+         CATEGORY_ICONS["header_untracked"], CATEGORY_ICONS["untracked"]),
+    ]
+    for items, cat_key, header, header_icon, item_icon in categories:
+        cat_checkboxes, cat_items = _build_category_checkboxes(
+            items, cat_key, header, header_icon, item_icon,
+            custom_tab_names, remembered_selections,
         )
-        dialog_height = 900  # Fallback
+        checkboxes.extend(cat_checkboxes)
+        all_items.extend(cat_items)
+
+    dialog_height = _get_max_dialog_height(0.90)
 
     # Build SwiftDialog JSON config
     # Wide compact design: larger fonts, tight spacing, path + shorthand labels
@@ -718,42 +672,21 @@ async def show_tab_customization_polymodal(
 
     # Build checkbox items with labels
     all_items = []
-
-    # Convert last_tab_selections to a set for O(1) lookup
     remembered_selections = set(last_tab_selections) if last_tab_selections else None
 
-    def is_tab_selected(tab: dict, category: str) -> int:
-        """Determine if a tab should be pre-checked (returns 1 or 0)."""
-        if remembered_selections is None:
-            # No remembered selections - use category defaults
-            return 1 if category in ("layout", "worktree") else 0
-        # Check if tab name or dir is in remembered selections
-        name = tab.get("name", os.path.basename(tab["dir"]))
-        return 1 if (name in remembered_selections or tab.get("dir") in remembered_selections) else 0
-
-    # Layout tabs
-    for tab in layout_tabs:
-        label = f"{tab.get('name', tab['dir'])} ({tab['dir']})"
-        alert.add_checkbox_item(label, is_tab_selected(tab, "layout"))
-        all_items.append({"label": label, "tab": tab, "category": "layout"})
-
-    # Worktrees
-    for wt in worktrees:
-        label = f"{wt['name']} ({wt['dir']})"
-        alert.add_checkbox_item(label, is_tab_selected(wt, "worktree"))
-        all_items.append({"label": label, "tab": wt, "category": "worktree"})
-
-    # Additional repos
-    for repo in additional_repos:
-        label = f"{repo['name']} ({repo['dir']})"
-        alert.add_checkbox_item(label, is_tab_selected(repo, "discovered"))
-        all_items.append({"label": label, "tab": repo, "category": "discovered"})
-
-    # Untracked folders
-    for folder in untracked_folders:
-        label = f"{folder['name']} ({folder['dir']})"
-        alert.add_checkbox_item(label, is_tab_selected(folder, "untracked"))
-        all_items.append({"label": label, "tab": folder, "category": "untracked"})
+    # PolyModalAlert uses simple label format and int (0/1) for checked state
+    poly_categories = [
+        (layout_tabs, "layout"),
+        (worktrees, "worktree"),
+        (additional_repos, "discovered"),
+        (untracked_folders, "untracked"),
+    ]
+    for items, cat_key in poly_categories:
+        for tab in items:
+            label = f"{tab.get('name', tab.get('dir', ''))} ({tab.get('dir', '')})"
+            checked = 1 if _is_tab_selected(tab, cat_key, remembered_selections) else 0
+            alert.add_checkbox_item(label, checked)
+            all_items.append({"label": label, "tab": tab, "category": cat_key})
 
     # Add buttons
     alert.add_button("Open Selected")
@@ -1008,12 +941,7 @@ def show_tab_reorder_dialog(
         # Build text fields — one per tab with a small number input
         textfields = []
         for i, tab in enumerate(current):
-            path = tab.get("dir", "")
-            name = (
-                custom_tab_names.get(path)
-                or tab.get("name")
-                or os.path.basename(path)
-            )
+            name = _get_display_name(tab, custom_tab_names)
             textfields.append({
                 "title": name,
                 "value": str(i + 1),
@@ -1064,12 +992,7 @@ def show_tab_reorder_dialog(
                 "Tab reorder preview",
                 operation="show_tab_reorder_dialog",
                 iteration=iteration,
-                order=[
-                    custom_tab_names.get(t.get("dir", ""))
-                    or t.get("name")
-                    or os.path.basename(t.get("dir", ""))
-                    for t in current
-                ],
+                order=[_get_display_name(t, custom_tab_names) for t in current],
             )
             continue
 
@@ -1079,12 +1002,7 @@ def show_tab_reorder_dialog(
                 "Tab order finalized",
                 operation="show_tab_reorder_dialog",
                 iterations=iteration,
-                final_order=[
-                    custom_tab_names.get(t.get("dir", ""))
-                    or t.get("name")
-                    or os.path.basename(t.get("dir", ""))
-                    for t in current
-                ],
+                final_order=[_get_display_name(t, custom_tab_names) for t in current],
             )
             return current
 
@@ -1106,12 +1024,7 @@ def _reorder_tabs_by_numbers(
     """Sort tabs by the numeric values from the reorder dialog output."""
     pairs = []
     for tab in tabs:
-        path = tab.get("dir", "")
-        name = (
-            custom_tab_names.get(path)
-            or tab.get("name")
-            or os.path.basename(path)
-        )
+        name = _get_display_name(tab, custom_tab_names)
         try:
             num = int(output.get(name, "999"))
         except (ValueError, TypeError):

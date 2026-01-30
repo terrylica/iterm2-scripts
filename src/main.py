@@ -521,34 +521,7 @@ async def main(connection):
             count=len(open_dirs),
         )
 
-    tabs_to_create = []
-    tabs_skipped = []
-    for tab_config in all_tabs:
-        expanded = os.path.realpath(
-            os.path.expanduser(tab_config["dir"])
-        ).rstrip("/")
-        if expanded in open_dirs:
-            tab_name = tab_config.get("name") or os.path.basename(expanded)
-            tabs_skipped.append(tab_name)
-            logger.info(
-                "Tab skipped - already open",
-                operation="main",
-                trace_id=main_trace_id,
-                tab_name=tab_name,
-                tab_dir=tab_config["dir"],
-            )
-        else:
-            tabs_to_create.append(tab_config)
-
-    if tabs_skipped:
-        logger.info(
-            f"Skipped {len(tabs_skipped)} already-open tab(s)",
-            operation="main",
-            trace_id=main_trace_id,
-            skipped=tabs_skipped,
-            creating=len(tabs_to_create),
-        )
-
+    tabs_to_create, tabs_skipped = filter_already_open_tabs(all_tabs, open_dirs)
     all_tabs = tabs_to_create
 
     # =========================================================================
@@ -612,6 +585,10 @@ async def main(connection):
             is_first=(not used_initial_tab),
         )
         used_initial_tab = True
+
+    # Reorder all window tabs to match the finalized order
+    if prefs.get("last_tab_order"):
+        await reorder_window_tabs(window, prefs["last_tab_order"])
 
     # Save updated preferences with all selected tabs (including skipped ones
     # that were already open — they are still part of the workspace selection)
