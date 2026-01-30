@@ -1,3 +1,10 @@
+# [3.2.0](https://github.com/terrylica/iterm2-scripts/compare/v3.1.4...v3.2.0) (2026-01-30)
+
+
+### Features
+
+* **tab-customization:** group additional repos by parent directory ([5eebb32](https://github.com/terrylica/iterm2-scripts/commit/5eebb32d8dfdef263bab5ebdda82ac57b8833b9c))
+
 ## [3.1.4](https://github.com/terrylica/iterm2-scripts/compare/v3.1.3...v3.1.4) (2026-01-30)
 
 
