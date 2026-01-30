@@ -3347,13 +3347,16 @@ def _build_grouped_category_checkboxes(
     all_items = []
 
     for parent_path, group_items in sorted_groups:
-        # Add sub-header for this parent directory
-        parent_name = Path(parent_path).name
+        # Add sub-header for this parent directory with bold styling
+        parent_name = Path(parent_path).name.upper()
+        count = len(group_items)
+        # Use heavy box-drawing characters for prominent demarcation
+        # ━━━━━━━━━━ PARENT_NAME (count) ━━━━━━━━━━
         checkboxes.append({
-            "label": f"  ── {parent_name}/ ({len(group_items)}) ──",
+            "label": f"━━━━━━━━  {parent_name}/ ({count})  ━━━━━━━━",
             "checked": False,
             "disabled": True,
-            "icon": "SF=folder.fill",
+            "icon": "SF=folder.fill.badge.gearshape",
         })
 
         # Sort items within group alphabetically by display name
