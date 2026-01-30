@@ -544,13 +544,18 @@ async def main(connection):
     # Track created tabs for reordering (dir_path → Tab object)
     created_tabs: dict[str, object] = {}
 
+    # Get custom tab names for display
+    custom_tab_names = prefs.get("custom_tab_names", {})
+
     # Create all tabs in the specified order
     for idx, tab_config in enumerate(all_tabs):
-        # Use directory basename as default name if not specified
-        tab_name = tab_config.get("name") or os.path.basename(
-            os.path.expanduser(tab_config["dir"])
-        )
         tab_dir = tab_config["dir"]
+        # Priority: custom_tab_names > tab_config name > directory basename
+        tab_name = (
+            custom_tab_names.get(tab_dir)
+            or tab_config.get("name")
+            or os.path.basename(os.path.expanduser(tab_dir))
+        )
 
         # Validate directory exists
         expanded_dir = os.path.expanduser(tab_dir)
