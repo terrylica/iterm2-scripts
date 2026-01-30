@@ -1,3 +1,13 @@
+# [3.1.0](https://github.com/terrylica/iterm2-scripts/compare/v3.0.3...v3.1.0) (2026-01-30)
+
+
+### Features
+
+* **launcher:** add tab reorder dialog with persistent ordering ([b12317e](https://github.com/terrylica/iterm2-scripts/commit/b12317ed8d5fdc012c4aeeaff4cd45028cff4208))
+* **launcher:** auto-open last workspace and add Back button ([a9921f4](https://github.com/terrylica/iterm2-scripts/commit/a9921f48a5c70778a934f2ec3a458db8fe34e309))
+* **launcher:** detect already-open tabs and skip duplicates ([76d5292](https://github.com/terrylica/iterm2-scripts/commit/76d5292e7b4ea11d45065915e0c595a12097c644))
+* **launcher:** use dropdown selects for tab reorder with 10x spacing ([e148a7a](https://github.com/terrylica/iterm2-scripts/commit/e148a7aa1a3f9aae611ffaf1a020719e600449c8))
+
 ## [3.0.3](https://github.com/terrylica/iterm2-scripts/compare/v3.0.2...v3.0.3) (2026-01-30)
 
 
