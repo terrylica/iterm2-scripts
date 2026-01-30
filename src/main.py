@@ -444,6 +444,49 @@ async def main(connection):
             all_tabs.extend(universal_worktrees)
 
     # =========================================================================
+    # Detect Already-Open Tabs
+    # =========================================================================
+
+    open_dirs = await get_open_tab_directories(window)
+    if open_dirs:
+        logger.info(
+            "Detected open directories",
+            operation="main",
+            trace_id=main_trace_id,
+            count=len(open_dirs),
+        )
+
+    tabs_to_create = []
+    tabs_skipped = []
+    for tab_config in all_tabs:
+        expanded = os.path.realpath(
+            os.path.expanduser(tab_config["dir"])
+        ).rstrip("/")
+        if expanded in open_dirs:
+            tab_name = tab_config.get("name") or os.path.basename(expanded)
+            tabs_skipped.append(tab_name)
+            logger.info(
+                "Tab skipped - already open",
+                operation="main",
+                trace_id=main_trace_id,
+                tab_name=tab_name,
+                tab_dir=tab_config["dir"],
+            )
+        else:
+            tabs_to_create.append(tab_config)
+
+    if tabs_skipped:
+        logger.info(
+            f"Skipped {len(tabs_skipped)} already-open tab(s)",
+            operation="main",
+            trace_id=main_trace_id,
+            skipped=tabs_skipped,
+            creating=len(tabs_to_create),
+        )
+
+    all_tabs = tabs_to_create
+
+    # =========================================================================
     # Window and Tab Creation
     # =========================================================================
 
@@ -456,7 +499,9 @@ async def main(connection):
     await maximize_window(window)
 
     # Track whether we've used the initial tab (for is_first logic)
-    used_initial_tab = False
+    # When tabs were skipped (already open), never reuse the active tab —
+    # the user's focused tab should not be overwritten.
+    used_initial_tab = len(tabs_skipped) > 0
 
     # Create all tabs in the specified order
     for idx, tab_config in enumerate(all_tabs):
@@ -503,8 +548,12 @@ async def main(connection):
         )
         used_initial_tab = True
 
-    # Save updated preferences with selected tabs
-    prefs["last_tab_selections"] = [t.get("name", t.get("dir", "unknown")) for t in all_tabs]
+    # Save updated preferences with all selected tabs (including skipped ones
+    # that were already open — they are still part of the workspace selection)
+    all_tab_names = list(tabs_skipped) + [
+        t.get("name", t.get("dir", "unknown")) for t in all_tabs
+    ]
+    prefs["last_tab_selections"] = all_tab_names
     save_preferences(prefs)
 
     logger.info(

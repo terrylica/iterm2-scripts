@@ -43,6 +43,7 @@ MODULE_ORDER = [
     "tool_installer.py",    # Homebrew tool installation
     "tab_customization.py", # Tab selection dialog
     "pane_setup.py",        # Pane creation and commands
+    "tab_detection.py",     # Detect already-open tabs
     "main.py",              # Entry point
 ]
 
