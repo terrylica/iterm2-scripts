@@ -1,3 +1,10 @@
+## [3.0.3](https://github.com/terrylica/iterm2-scripts/compare/v3.0.2...v3.0.3) (2026-01-30)
+
+
+### Bug Fixes
+
+* **iterm-open:** drop \3/\4 params and handle URLs in Semantic History ([dfddfc0](https://github.com/terrylica/iterm2-scripts/commit/dfddfc0ebcdbf1321890f4240453b12e3ade6dd7))
+
 ## [3.0.2](https://github.com/terrylica/iterm2-scripts/compare/v3.0.1...v3.0.2) (2026-01-29)
 
 
