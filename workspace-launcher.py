@@ -5106,11 +5106,12 @@ async def main(connection):
                         return
 
             # Apply saved tab order from previous session (if any)
+            # Use normalize_tab_path for consistent comparison (handles ~/path vs /Users/path)
             saved_order = prefs.get("last_tab_order")
             if saved_order and len(final_tabs) > 1:
-                order_map = {d: i for i, d in enumerate(saved_order)}
+                order_map = {normalize_tab_path(d): i for i, d in enumerate(saved_order)}
                 final_tabs.sort(
-                    key=lambda t: order_map.get(t.get("dir", ""), 999)
+                    key=lambda t: order_map.get(normalize_tab_path(get_tab_dir(t)), 999)
                 )
 
             all_tabs = final_tabs
@@ -5127,8 +5128,9 @@ async def main(connection):
                 if reordered is not None:
                     all_tabs = reordered
                     # Persist tab order so it's remembered next session
+                    # Use normalize_tab_path for consistent storage
                     prefs["last_tab_order"] = [
-                        t.get("dir", "") for t in all_tabs
+                        normalize_tab_path(get_tab_dir(t)) for t in all_tabs
                     ]
                     save_preferences(prefs)
                 # None means cancelled reorder — keep original order
