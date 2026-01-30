@@ -525,7 +525,7 @@ def show_tab_customization_swiftdialog(
             "size": "regular"
         },
         "button1text": "Open Selected",
-        "button2text": "Cancel",
+        "button2text": "Back",  # Returns to workspace selector
         "infobuttontext": "Rename Tabs",  # Info button triggers rename dialog
         "height": str(dialog_height),
         "width": "750",  # Match SwiftDialog's 700px checkbox area + padding
@@ -564,15 +564,15 @@ def show_tab_customization_swiftdialog(
         # Clean up temp file
         Path(config_path).unlink(missing_ok=True)
 
-        # Check return code (0=button1/OK, 2=button2/Cancel, 3=info button, 4=timeout)
+        # Check return code (0=button1/OK, 2=button2/Back, 3=info button, 4=timeout)
         if result.returncode == 2:
             logger.info(
-                "SwiftDialog cancelled by user",
+                "Back to selector requested",
                 operation="show_tab_customization_swiftdialog",
-                status="cancelled",
+                status="back",
                 trace_id=op_trace_id
             )
-            return None
+            return "BACK_TO_SELECTOR"
 
         if result.returncode == 3:
             # Info button clicked - "Rename Tabs"

@@ -7,6 +7,61 @@
 # =============================================================================
 
 
+async def show_auto_open_dialog(
+    connection, layout_name: str
+) -> str:
+    """
+    Show a dialog offering to auto-open the last workspace.
+
+    Args:
+        connection: iTerm2 connection object
+        layout_name: Name of the last used workspace
+
+    Returns:
+        "open" if user accepts, "change" to show full selector, "cancel" to exit.
+    """
+    alert = iterm2.Alert(
+        title="Workspace Launcher",
+        subtitle=f"Press Enter to open workspace: {layout_name}",
+    )
+    # Button 0: Open (default/blue — triggers if user just hits Enter)
+    alert.add_button("Open")
+    # Button 1: Change Workspace (goes to full selector)
+    alert.add_button("Change Workspace")
+    # Button 2: Cancel (exit entirely)
+    alert.add_button("Cancel")
+
+    try:
+        result = await alert.async_run(connection)
+
+        # Restore focus
+        app = await iterm2.async_get_app(connection)
+        if app:
+            await app.async_activate()
+
+        button_index = result - 1000
+        logger.debug(
+            "Auto-open dialog result",
+            operation="show_auto_open_dialog",
+            button_index=button_index,
+        )
+
+        if button_index == 0:
+            return "open"
+        elif button_index == 1:
+            return "change"
+        else:
+            return "cancel"
+
+    except (iterm2.RPCException, ValueError, TypeError) as e:
+        logger.error(
+            "Auto-open dialog error",
+            operation="show_auto_open_dialog",
+            error=str(e),
+        )
+        return "cancel"
+
+
 async def show_layout_selector(
     connection, layouts: list[dict], last_layout: str | None = None
 ) -> dict | None:
