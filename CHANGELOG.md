@@ -1,3 +1,10 @@
+## [3.1.4](https://github.com/terrylica/iterm2-scripts/compare/v3.1.3...v3.1.4) (2026-01-30)
+
+
+### Bug Fixes
+
+* **tab-selections:** use custom names when saving tab selections ([8c87480](https://github.com/terrylica/iterm2-scripts/commit/8c874809971e5c9d8b4a0a84037a629ccb3d3733))
+
 ## [3.1.3](https://github.com/terrylica/iterm2-scripts/compare/v3.1.2...v3.1.3) (2026-01-30)
 
 
