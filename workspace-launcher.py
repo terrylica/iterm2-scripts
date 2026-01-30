@@ -5249,8 +5249,9 @@ async def main(connection):
 
     # Save updated preferences with all selected tabs (including skipped ones
     # that were already open — they are still part of the workspace selection)
+    # Use get_tab_display_name for consistent name resolution with custom names
     all_tab_names = list(tabs_skipped) + [
-        t.get("name", t.get("dir", "unknown")) for t in all_tabs
+        get_tab_display_name(t, custom_tab_names) for t in all_tabs
     ]
     prefs["last_tab_selections"] = all_tab_names
     save_preferences(prefs)
