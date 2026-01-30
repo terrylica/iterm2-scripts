@@ -1,3 +1,10 @@
+## [3.1.3](https://github.com/terrylica/iterm2-scripts/compare/v3.1.2...v3.1.3) (2026-01-30)
+
+
+### Bug Fixes
+
+* **tab-order:** normalize paths when loading and saving tab order ([d072c46](https://github.com/terrylica/iterm2-scripts/commit/d072c46931fb6ae2a8766ab6e872600328d81595))
+
 ## [3.1.2](https://github.com/terrylica/iterm2-scripts/compare/v3.1.1...v3.1.2) (2026-01-30)
 
 
