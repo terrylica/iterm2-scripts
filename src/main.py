@@ -459,7 +459,34 @@ async def main(connection):
                     if final_tabs is None:
                         return
 
+            # Apply saved tab order from previous session (if any)
+            saved_order = prefs.get("last_tab_order")
+            if saved_order and len(final_tabs) > 1:
+                order_map = {d: i for i, d in enumerate(saved_order)}
+                final_tabs.sort(
+                    key=lambda t: order_map.get(t.get("dir", ""), 999)
+                )
+
             all_tabs = final_tabs
+
+            # Offer tab reorder if more than 1 tab selected
+            if len(all_tabs) > 1 and is_swiftdialog_available():
+                reordered = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda _tabs=all_tabs, _prefs=prefs: show_tab_reorder_dialog(
+                        _tabs,
+                        custom_tab_names=_prefs.get("custom_tab_names", {}),
+                    ),
+                )
+                if reordered is not None:
+                    all_tabs = reordered
+                    # Persist tab order so it's remembered next session
+                    prefs["last_tab_order"] = [
+                        t.get("dir", "") for t in all_tabs
+                    ]
+                    save_preferences(prefs)
+                # None means cancelled reorder — keep original order
+
             break
         else:
             # Build final tab list with legacy worktrees inserted after matching tab

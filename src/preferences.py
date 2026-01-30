@@ -261,6 +261,11 @@ def save_preferences(prefs: dict) -> None:
         tabs_str = ", ".join(f'"{t}"' for t in prefs["last_tab_selections"])
         lines.append(f"last_tab_selections = [{tabs_str}]")
 
+    if prefs.get("last_tab_order"):
+        # Format as TOML array of dir paths (persists reorder across sessions)
+        order_str = ", ".join(f'"{d}"' for d in prefs["last_tab_order"])
+        lines.append(f"last_tab_order = [{order_str}]")
+
     # Save disabled layouts list
     disabled_layouts = prefs.get("disabled_layouts")
     if disabled_layouts:

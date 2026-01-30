@@ -972,6 +972,11 @@ def save_preferences(prefs: dict) -> None:
         tabs_str = ", ".join(f'"{t}"' for t in prefs["last_tab_selections"])
         lines.append(f"last_tab_selections = [{tabs_str}]")
 
+    if prefs.get("last_tab_order"):
+        # Format as TOML array of dir paths (persists reorder across sessions)
+        order_str = ", ".join(f'"{d}"' for d in prefs["last_tab_order"])
+        lines.append(f"last_tab_order = [{order_str}]")
+
     # Save disabled layouts list
     disabled_layouts = prefs.get("disabled_layouts")
     if disabled_layouts:
@@ -4107,6 +4112,156 @@ async def show_tab_customization(
             last_tab_selections
         )
 
+
+# =============================================================================
+# Tab Reorder Dialog
+# =============================================================================
+
+
+def show_tab_reorder_dialog(
+    tabs: list[dict],
+    custom_tab_names: dict[str, str] | None = None,
+) -> list[dict] | None:
+    """
+    Show a dialog to reorder selected tabs before opening.
+
+    Uses SwiftDialog text fields with numeric ordering. The user assigns
+    numbers to each tab, clicks Sort to preview the new order (dialog
+    re-launches with reordered tabs), and clicks Finalize to commit.
+
+    Args:
+        tabs: List of tab dicts (must have "dir" key, optional "name")
+        custom_tab_names: Dict mapping paths to custom shorthand names
+
+    Returns:
+        Reordered list of tab dicts, or None if cancelled
+    """
+    if not tabs or len(tabs) <= 1:
+        return tabs  # Nothing to reorder
+
+    if custom_tab_names is None:
+        custom_tab_names = {}
+
+    current = list(tabs)
+    iteration = 0
+
+    while True:
+        # Build text fields — one per tab with a small number input
+        textfields = []
+        for i, tab in enumerate(current):
+            path = tab.get("dir", "")
+            name = (
+                custom_tab_names.get(path)
+                or tab.get("name")
+                or os.path.basename(path)
+            )
+            textfields.append({
+                "title": name,
+                "value": str(i + 1),
+                "prompt": "#",
+                "regex": "^[0-9]+$",
+                "regexerror": "Enter a number",
+            })
+
+        if iteration == 0:
+            msg = (
+                "Type numbers to set tab order, then click **Sort** to preview.\\n"
+                "Click **Finalize** to open tabs in the current order."
+            )
+            button1 = "Sort"
+        else:
+            msg = (
+                "Tabs re-sorted. Adjust numbers and **Sort** again, "
+                "or click **Finalize** to apply this order."
+            )
+            button1 = "Sort Again"
+
+        dialog_config = {
+            "title": "Tab Order",
+            "titlefont": "size=18",
+            "message": msg,
+            "messagefont": "size=14",
+            "appearance": "dark",
+            "hideicon": True,
+            "textfield": textfields,
+            "button1text": button1,
+            "button2text": "Cancel",
+            "infobuttontext": "Finalize",
+            "width": "450",
+            "height": str(160 + 55 * len(current)),
+            "moveable": True,
+            "ontop": True,
+            "json": True,
+        }
+
+        return_code, output = run_swiftdialog(dialog_config)
+
+        if return_code == 0:
+            # Sort button (button1) — reorder and re-show
+            if output:
+                current = _reorder_tabs_by_numbers(current, custom_tab_names, output)
+            iteration += 1
+            logger.info(
+                "Tab reorder preview",
+                operation="show_tab_reorder_dialog",
+                iteration=iteration,
+                order=[
+                    custom_tab_names.get(t.get("dir", ""))
+                    or t.get("name")
+                    or os.path.basename(t.get("dir", ""))
+                    for t in current
+                ],
+            )
+            continue
+
+        elif return_code == 3:
+            # Finalize (info button) — commit current order
+            logger.info(
+                "Tab order finalized",
+                operation="show_tab_reorder_dialog",
+                iterations=iteration,
+                final_order=[
+                    custom_tab_names.get(t.get("dir", ""))
+                    or t.get("name")
+                    or os.path.basename(t.get("dir", ""))
+                    for t in current
+                ],
+            )
+            return current
+
+        else:
+            # Cancel (rc=2) or other
+            logger.debug(
+                "Tab reorder cancelled",
+                return_code=return_code,
+                operation="show_tab_reorder_dialog",
+            )
+            return None
+
+
+def _reorder_tabs_by_numbers(
+    tabs: list[dict],
+    custom_tab_names: dict[str, str],
+    output: dict,
+) -> list[dict]:
+    """Sort tabs by the numeric values from the reorder dialog output."""
+    pairs = []
+    for tab in tabs:
+        path = tab.get("dir", "")
+        name = (
+            custom_tab_names.get(path)
+            or tab.get("name")
+            or os.path.basename(path)
+        )
+        try:
+            num = int(output.get(name, "999"))
+        except (ValueError, TypeError):
+            num = 999
+        pairs.append((num, tab))
+
+    pairs.sort(key=lambda x: x[0])
+    return [tab for _, tab in pairs]
+
 # =============================================================================
 # Module: pane_setup.py
 # =============================================================================
@@ -4840,7 +4995,34 @@ async def main(connection):
                     if final_tabs is None:
                         return
 
+            # Apply saved tab order from previous session (if any)
+            saved_order = prefs.get("last_tab_order")
+            if saved_order and len(final_tabs) > 1:
+                order_map = {d: i for i, d in enumerate(saved_order)}
+                final_tabs.sort(
+                    key=lambda t: order_map.get(t.get("dir", ""), 999)
+                )
+
             all_tabs = final_tabs
+
+            # Offer tab reorder if more than 1 tab selected
+            if len(all_tabs) > 1 and is_swiftdialog_available():
+                reordered = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda _tabs=all_tabs, _prefs=prefs: show_tab_reorder_dialog(
+                        _tabs,
+                        custom_tab_names=_prefs.get("custom_tab_names", {}),
+                    ),
+                )
+                if reordered is not None:
+                    all_tabs = reordered
+                    # Persist tab order so it's remembered next session
+                    prefs["last_tab_order"] = [
+                        t.get("dir", "") for t in all_tabs
+                    ]
+                    save_preferences(prefs)
+                # None means cancelled reorder — keep original order
+
             break
         else:
             # Build final tab list with legacy worktrees inserted after matching tab
