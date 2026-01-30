@@ -938,27 +938,29 @@ def show_tab_reorder_dialog(
     iteration = 0
 
     while True:
-        # Build text fields — one per tab with a small number input
-        textfields = []
+        # Build select dropdowns — 10x range with defaults at 10, 20, 30...
+        # Gives 9 slots between each tab for free insertion without conflicts
+        count = len(current)
+        max_val = count * 10
+        values = [str(n) for n in range(1, max_val + 1)]
+        selectitems = []
         for i, tab in enumerate(current):
             name = _get_display_name(tab, custom_tab_names)
-            textfields.append({
+            selectitems.append({
                 "title": name,
-                "value": str(i + 1),
-                "prompt": "#",
-                "regex": "^[0-9]+$",
-                "regexerror": "Enter a number",
+                "values": values,
+                "default": str((i + 1) * 10),
             })
 
         if iteration == 0:
             msg = (
-                "Type numbers to set tab order, then click **Sort** to preview.\\n"
+                "Set tab order using dropdowns, then click **Sort** to preview.\\n"
                 "Click **Finalize** to open tabs in the current order."
             )
             button1 = "Sort"
         else:
             msg = (
-                "Tabs re-sorted. Adjust numbers and **Sort** again, "
+                "Tabs re-sorted. Adjust and **Sort** again, "
                 "or click **Finalize** to apply this order."
             )
             button1 = "Sort Again"
@@ -970,12 +972,12 @@ def show_tab_reorder_dialog(
             "messagefont": "size=14",
             "appearance": "dark",
             "hideicon": True,
-            "textfield": textfields,
+            "selectitems": selectitems,
             "button1text": button1,
             "button2text": "Cancel",
             "infobuttontext": "Finalize",
-            "width": "450",
-            "height": str(160 + 55 * len(current)),
+            "width": "750",
+            "height": str(160 + 50 * count),
             "moveable": True,
             "ontop": True,
             "json": True,
@@ -1025,8 +1027,12 @@ def _reorder_tabs_by_numbers(
     pairs = []
     for tab in tabs:
         name = _get_display_name(tab, custom_tab_names)
+        raw = output.get(name, "999")
+        # Handle both textfield ("3") and selectitems ({"selectedValue": "3"})
+        if isinstance(raw, dict):
+            raw = raw.get("selectedValue", "999")
         try:
-            num = int(output.get(name, "999"))
+            num = int(raw)
         except (ValueError, TypeError):
             num = 999
         pairs.append((num, tab))
