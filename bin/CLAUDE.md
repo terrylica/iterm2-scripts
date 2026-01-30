@@ -41,15 +41,18 @@ ln -sf "$(pwd)/bin/ghostty-helix" ~/.local/bin/
 **iTerm2 Configuration**: Settings > Profiles > Advanced > Semantic History
 
 ```
-Run command: ~/.local/bin/iterm-open "\5" "\1" "\3" "\4"
+Run command: ~/.local/bin/iterm-open "\5" "\1"
 ```
 
 **Parameters**:
 
 - `\5` = Working directory
 - `\1` = Clicked file path
-- `\3` = Text before click position
-- `\4` = Text after click position
+
+> **Note**: `\3` (text before click) and `\4` (text after click) are intentionally omitted.
+> iTerm2 does not shell-escape these values before interpolation into `/bin/sh -c`,
+> so special characters in terminal output (e.g., Claude Code's `⏺` markers) break
+> the command invocation. See [iTerm2 #4463](https://gitlab.com/gnachman/iterm2/-/issues/4463).
 
 **Features**:
 

@@ -190,13 +190,14 @@ COL_NUM=""
 
 pwd_arg="$1"
 file="${2:-}"
-# Additional Semantic History variables (when available)
-text_before="${3:-}"  # \3 = text before click
-text_after="${4:-}"   # \4 = text after click
+# NOTE: \3 (text before click) and \4 (text after click) are intentionally NOT passed.
+# iTerm2 does not shell-escape these values before interpolation into /bin/sh -c,
+# so special characters (", (, ), ⏺, …) in Claude Code output break the command.
+# See: https://gitlab.com/gnachman/iterm2/-/issues/4463
 
 # Debug logging
 LOG_FILE="/tmp/iterm-open.log"
-echo "$(date): pwd_arg='$pwd_arg' file='$file' before='$text_before' after='$text_after'" >> "$LOG_FILE"
+echo "$(date): pwd_arg='$pwd_arg' file='$file'" >> "$LOG_FILE"
 
 # Handle missing or invalid pwd (iTerm2 passes literal \5 when path not recognized)
 if [[ -z "$pwd_arg" ]] || [[ "$pwd_arg" == '\5' ]] || [[ "$pwd_arg" == '\d' ]] || [[ "$pwd_arg" == '\\'* ]] || [[ "$pwd_arg" == '/' ]]; then
@@ -207,68 +208,27 @@ else
     pwd="$pwd_arg"
 fi
 
+# Handle URLs: open in default browser
+if [[ "$file" =~ ^https?:// ]]; then
+    echo "$(date): Opening URL in browser: $file" >> "$LOG_FILE"
+    open "$file"
+    exit 0
+fi
+
 # Handle unsubstituted file parameter (iTerm2 passes literal \1 when path not recognized)
 if [[ -z "$file" ]] || [[ "$file" == '\1' ]] || [[ "$file" == '\0' ]] || [[ "$file" == '\\'* ]]; then
     echo "$(date): file param unsubstituted ('$file')" >> "$LOG_FILE"
 
-    # Try to extract path from text_before + text_after (\3 + \4)
-    # When clicking on "/docs/decisions/0008-foo.md", iTerm2 provides:
-    #   \3 = text before click position on the line
-    #   \4 = text after click position on the line
-    # We need to find the path that spans the click position
-    extracted_path=""
+    # Fallback to clipboard
+    clipboard=$(pbpaste 2>/dev/null | head -1 | tr -d '\n\r')
 
-    if [[ -n "$text_before" ]] || [[ -n "$text_after" ]]; then
-        echo "$(date): Attempting path extraction from context" >> "$LOG_FILE"
-
-        # Combine before+after and extract path-like patterns
-        # Look for patterns like: /path/to/file.md, ./relative/path, ~/home/path
-        combined="${text_before}${text_after}"
-
-        # Try to find a path that spans the click point
-        # The click was between text_before and text_after
-        # Find the path fragment at end of text_before + start of text_after
-
-        # Extract trailing path fragment from text_before (everything after last space/delimiter)
-        before_fragment=""
-        if [[ -n "$text_before" ]]; then
-            # Get characters after last whitespace, (, [, ", ', `, or start of line
-            before_fragment=$(echo "$text_before" | sed -E 's/.*[[:space:]\(\[\"\x27\`]//; s/.*^//')
-        fi
-
-        # Extract leading path fragment from text_after (everything before first space/delimiter)
-        after_fragment=""
-        if [[ -n "$text_after" ]]; then
-            # Get characters before first whitespace, ), ], ", ', `, or end of line
-            after_fragment=$(echo "$text_after" | sed -E 's/[[:space:]\)\]\"\x27\`].*//')
-        fi
-
-        # Combine fragments
-        extracted_path="${before_fragment}${after_fragment}"
-        echo "$(date): before_fragment='$before_fragment' after_fragment='$after_fragment'" >> "$LOG_FILE"
-        echo "$(date): extracted_path='$extracted_path'" >> "$LOG_FILE"
-
-        # Validate extracted path looks like a path (allow /, ~, ., or alphanumeric start)
-        if [[ -n "$extracted_path" ]] && [[ "$extracted_path" =~ ^[~/.]?[a-zA-Z0-9_./-]+$ ]]; then
-            file="$extracted_path"
-            echo "$(date): Using extracted path from context: '$file'" >> "$LOG_FILE"
-        else
-            extracted_path=""
-        fi
-    fi
-
-    # Fallback to clipboard if extraction failed
-    if [[ -z "$extracted_path" ]]; then
-        clipboard=$(pbpaste 2>/dev/null | head -1 | tr -d '\n\r')
-
-        if [[ -n "$clipboard" ]] && [[ "$clipboard" =~ ^[~./]?[a-zA-Z0-9_./-]+\.?[a-zA-Z0-9]*$ ]]; then
-            file="$clipboard"
-            echo "$(date): Using clipboard as file: '$file'" >> "$LOG_FILE"
-        else
-            echo "$(date): Error: iTerm2 couldn't recognize path. Clipboard ('$clipboard') not a valid path." >> "$LOG_FILE"
-            echo "$(date): Tip: Select the path text first, then Cmd+click" >> "$LOG_FILE"
-            exit 1
-        fi
+    if [[ -n "$clipboard" ]] && [[ "$clipboard" =~ ^[~./]?[a-zA-Z0-9_./-]+\.?[a-zA-Z0-9]*$ ]]; then
+        file="$clipboard"
+        echo "$(date): Using clipboard as file: '$file'" >> "$LOG_FILE"
+    else
+        echo "$(date): Error: iTerm2 couldn't recognize path. Clipboard ('$clipboard') not a valid path." >> "$LOG_FILE"
+        echo "$(date): Tip: Select the path text first, then Cmd+click" >> "$LOG_FILE"
+        exit 1
     fi
 fi
 
@@ -314,17 +274,6 @@ parsed_output=$(parse_line_notation "$file" "$pwd")
 file=$(echo "$parsed_output" | sed -n '1p')
 LINE_NUM=$(echo "$parsed_output" | sed -n '2p')
 COL_NUM=$(echo "$parsed_output" | sed -n '3p')
-
-# If no line notation in file param, check text_after (iTerm2 may split at colon)
-# text_after might contain "ate.sh:42" where :42 is the line number
-if [[ -z "$LINE_NUM" ]] && [[ -n "$text_after" ]]; then
-    # Look for :line:col pattern in text_after (may have filename remnants before it)
-    if [[ "$text_after" =~ :([0-9]+):?([0-9]*) ]]; then
-        LINE_NUM="${BASH_REMATCH[1]}"
-        COL_NUM="${BASH_REMATCH[2]}"
-        echo "$(date): Extracted line notation from text_after: line=$LINE_NUM col=$COL_NUM" >> "$LOG_FILE"
-    fi
-fi
 
 if [[ -n "$LINE_NUM" ]]; then
     echo "$(date): Parsed line notation: file='$file' line=$LINE_NUM col=$COL_NUM" >> "$LOG_FILE"

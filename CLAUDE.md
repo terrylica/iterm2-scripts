@@ -200,7 +200,7 @@ ln -sf "$(pwd)/bin/open-in-helix" ~/.local/bin/
 Settings > Profiles > Advanced > Semantic History:
 
 ```
-Run command: ~/.local/bin/iterm-open "\5" "\1" "\3" "\4"
+Run command: ~/.local/bin/iterm-open "\5" "\1"
 ```
 
 ---
