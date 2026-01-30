@@ -76,6 +76,76 @@ def _build_category_checkboxes(
     return checkboxes, all_items
 
 
+def _build_grouped_category_checkboxes(
+    items: list[dict],
+    category_key: str,
+    header_label: str,
+    header_icon: str,
+    item_icon: str,
+    custom_tab_names: dict[str, str],
+    remembered_selections: set[str] | None,
+) -> tuple[list[dict], list[dict]]:
+    """Build checkbox entries grouped by parent directory.
+
+    Similar to _build_category_checkboxes but groups items by their parent
+    directory (e.g., ~/eon/, ~/fork-tools/) with sub-headers.
+
+    Returns:
+        Tuple of (checkboxes list for SwiftDialog, all_items metadata list).
+    """
+    if not items:
+        return [], []
+
+    # Group items by parent directory
+    groups: dict[str, list[dict]] = {}
+    for tab in items:
+        path = get_tab_dir(tab)
+        expanded = Path(path).expanduser()
+        # Use full parent path for grouping key to handle same-name dirs
+        parent_key = str(expanded.parent)
+        if parent_key not in groups:
+            groups[parent_key] = []
+        groups[parent_key].append(tab)
+
+    # Sort groups by parent directory name, then sort items within each group
+    sorted_groups = sorted(groups.items(), key=lambda x: Path(x[0]).name.lower())
+
+    checkboxes = [
+        {"label": header_label, "checked": False, "disabled": True, "icon": header_icon}
+    ]
+    all_items = []
+
+    for parent_path, group_items in sorted_groups:
+        # Add sub-header for this parent directory
+        parent_name = Path(parent_path).name
+        checkboxes.append({
+            "label": f"  ── {parent_name}/ ({len(group_items)}) ──",
+            "checked": False,
+            "disabled": True,
+            "icon": "SF=folder.fill",
+        })
+
+        # Sort items within group alphabetically by display name
+        group_items.sort(key=lambda t: get_tab_display_name(t, custom_tab_names).lower())
+
+        for tab in group_items:
+            path = get_tab_dir(tab)
+            name = get_tab_display_name(tab, custom_tab_names)
+            label = format_tab_label(path, name)
+
+            tab_path = Path(path).expanduser()
+            icon = item_icon if tab_path.exists() else CATEGORY_ICONS["missing_path"]
+
+            checkboxes.append({
+                "label": label,
+                "checked": _is_tab_selected(tab, category_key, remembered_selections, custom_tab_names),
+                "icon": icon,
+            })
+            all_items.append({"label": label, "tab": tab, "category": category_key})
+
+    return checkboxes, all_items
+
+
 # =============================================================================
 # Category Selector Dialog
 # =============================================================================
@@ -442,24 +512,39 @@ def show_tab_customization_swiftdialog(
     all_items = []
     remembered_selections = set(last_tab_selections) if last_tab_selections else None
 
-    # Build all category checkboxes using shared helper
-    categories = [
+    # Build category checkboxes using shared helpers
+    # Layout tabs and worktrees use flat list
+    flat_categories = [
         (layout_tabs, "layout", "—— Layout Tabs ——",
          CATEGORY_ICONS["header_layout"], CATEGORY_ICONS["layout_tab"]),
         (worktrees, "worktree", "—— Git Worktrees ——",
          CATEGORY_ICONS["header_worktree"], CATEGORY_ICONS["git_worktree"]),
-        (additional_repos, "discovered", "—— Additional Repos ——",
-         CATEGORY_ICONS["header_repo"], CATEGORY_ICONS["additional_repo"]),
-        (untracked_folders, "untracked", "—— Untracked Folders ——",
-         CATEGORY_ICONS["header_untracked"], CATEGORY_ICONS["untracked"]),
     ]
-    for items, cat_key, header, header_icon, item_icon in categories:
+    for items, cat_key, header, header_icon, item_icon in flat_categories:
         cat_checkboxes, cat_items = _build_category_checkboxes(
             items, cat_key, header, header_icon, item_icon,
             custom_tab_names, remembered_selections,
         )
         checkboxes.extend(cat_checkboxes)
         all_items.extend(cat_items)
+
+    # Additional repos grouped by parent directory (alphabetically: eon, fork-tools, own)
+    repo_checkboxes, repo_items = _build_grouped_category_checkboxes(
+        additional_repos, "discovered", "—— Additional Repos ——",
+        CATEGORY_ICONS["header_repo"], CATEGORY_ICONS["additional_repo"],
+        custom_tab_names, remembered_selections,
+    )
+    checkboxes.extend(repo_checkboxes)
+    all_items.extend(repo_items)
+
+    # Untracked folders use flat list
+    untracked_checkboxes, untracked_items = _build_category_checkboxes(
+        untracked_folders, "untracked", "—— Untracked Folders ——",
+        CATEGORY_ICONS["header_untracked"], CATEGORY_ICONS["untracked"],
+        custom_tab_names, remembered_selections,
+    )
+    checkboxes.extend(untracked_checkboxes)
+    all_items.extend(untracked_items)
 
     dialog_height = _get_max_dialog_height(0.90)
 
