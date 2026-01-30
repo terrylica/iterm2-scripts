@@ -1,3 +1,10 @@
+## [3.1.2](https://github.com/terrylica/iterm2-scripts/compare/v3.1.1...v3.1.2) (2026-01-30)
+
+
+### Bug Fixes
+
+* **tab-names:** use custom shorthand names when creating new tabs ([9c5e501](https://github.com/terrylica/iterm2-scripts/commit/9c5e5019c27c1f55b1aad9eee13b8641b69addc9))
+
 ## [3.1.1](https://github.com/terrylica/iterm2-scripts/compare/v3.1.0...v3.1.1) (2026-01-30)
 
 
