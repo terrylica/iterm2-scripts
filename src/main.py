@@ -512,6 +512,9 @@ async def main(connection):
     # Detect Already-Open Tabs
     # =========================================================================
 
+    # Get custom tab names early - used by filter and display throughout
+    custom_tab_names = prefs.get("custom_tab_names", {})
+
     open_dirs = await get_open_tab_directories(window)
     if open_dirs:
         logger.info(
@@ -521,7 +524,9 @@ async def main(connection):
             count=len(open_dirs),
         )
 
-    tabs_to_create, tabs_skipped = filter_already_open_tabs(all_tabs, open_dirs)
+    tabs_to_create, tabs_skipped = filter_already_open_tabs(
+        all_tabs, open_dirs, custom_tab_names
+    )
     all_tabs = tabs_to_create
 
     # =========================================================================
@@ -544,21 +549,14 @@ async def main(connection):
     # Track created tabs for reordering (dir_path → Tab object)
     created_tabs: dict[str, object] = {}
 
-    # Get custom tab names for display
-    custom_tab_names = prefs.get("custom_tab_names", {})
-
     # Create all tabs in the specified order
     for idx, tab_config in enumerate(all_tabs):
-        tab_dir = tab_config["dir"]
-        # Priority: custom_tab_names > tab_config name > directory basename
-        tab_name = (
-            custom_tab_names.get(tab_dir)
-            or tab_config.get("name")
-            or os.path.basename(os.path.expanduser(tab_dir))
-        )
+        tab_dir = get_tab_dir(tab_config)
+        # Use centralized utility for consistent name resolution
+        tab_name = get_tab_display_name(tab_config, custom_tab_names)
 
         # Validate directory exists
-        expanded_dir = os.path.expanduser(tab_dir)
+        expanded_dir = expand_tab_path(tab_dir)
         if not os.path.isdir(expanded_dir):
             logger.warning(
                 "Tab skipped - directory not found",

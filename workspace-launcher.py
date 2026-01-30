@@ -3137,6 +3137,95 @@ async def offer_tool_installation(
     return False
 
 # =============================================================================
+# Module: tab_utils.py
+# =============================================================================
+
+# ruff: noqa: F821
+# ADR: docs/adr/2026-01-26-modular-source-concatenation.md
+# This module is concatenated with _header.py - imports come from there
+
+# =============================================================================
+# Tab Utilities
+# =============================================================================
+# Centralized utilities for tab data handling to ensure consistency across
+# all modules. This prevents bugs where display names, paths, or other tab
+# properties are computed differently in different parts of the codebase.
+
+
+def normalize_tab_path(path: str) -> str:
+    """Normalize a tab directory path for consistent comparison.
+
+    Expands ~ and resolves symlinks, then strips trailing slashes.
+    Use this whenever comparing tab paths for equality.
+
+    Args:
+        path: Raw path string (may contain ~ or be relative).
+
+    Returns:
+        Absolute normalized path suitable for comparison.
+    """
+    return os.path.realpath(os.path.expanduser(path)).rstrip("/")
+
+
+def expand_tab_path(path: str) -> str:
+    """Expand ~ in a tab path without resolving symlinks.
+
+    Use this when you need the actual filesystem path but want to
+    preserve symlink structure (e.g., for display or cd commands).
+
+    Args:
+        path: Raw path string (may contain ~).
+
+    Returns:
+        Path with ~ expanded.
+    """
+    return os.path.expanduser(path)
+
+
+def get_tab_display_name(
+    tab: dict,
+    custom_tab_names: dict[str, str] | None = None,
+) -> str:
+    """Get the display name for a tab with consistent priority.
+
+    This is the SINGLE SOURCE OF TRUTH for tab display names.
+    All code that needs to display a tab name should call this function.
+
+    Priority order:
+    1. custom_tab_names[dir] - User's custom shorthand name
+    2. tab["name"] - Name from workspace config
+    3. basename(dir) - Directory name as fallback
+
+    Args:
+        tab: Tab configuration dict (must have "dir" key, may have "name").
+        custom_tab_names: Optional mapping of dir paths to custom names.
+
+    Returns:
+        Display name string for the tab.
+    """
+    custom_tab_names = custom_tab_names or {}
+    path = tab.get("dir", "")
+    return (
+        custom_tab_names.get(path)
+        or tab.get("name")
+        or os.path.basename(expand_tab_path(path))
+    )
+
+
+def get_tab_dir(tab: dict) -> str:
+    """Get the directory path from a tab config dict.
+
+    Handles both "dir" and legacy "path" keys for compatibility.
+
+    Args:
+        tab: Tab configuration dict.
+
+    Returns:
+        Directory path string (may contain ~, not expanded).
+    """
+    return tab.get("dir") or tab.get("path", "")
+
+# =============================================================================
 # Module: tab_customization.py
 # =============================================================================
 
@@ -3150,12 +3239,8 @@ async def offer_tool_installation(
 # =============================================================================
 # Shared Helpers
 # =============================================================================
-
-
-def _get_display_name(tab: dict, custom_tab_names: dict[str, str]) -> str:
-    """Get the display name for a tab, preferring custom name over default."""
-    path = tab.get("dir", "")
-    return custom_tab_names.get(path) or tab.get("name") or os.path.basename(path)
+# Note: get_tab_display_name() and related utilities are in tab_utils.py
+# to ensure consistent tab name resolution across the entire codebase.
 
 
 def _get_max_dialog_height(screen_percent: float = 0.90, fallback: int = 900) -> int:
@@ -3170,13 +3255,16 @@ def _get_max_dialog_height(screen_percent: float = 0.90, fallback: int = 900) ->
 
 
 def _is_tab_selected(
-    tab: dict, category: str, remembered_selections: set[str] | None
+    tab: dict,
+    category: str,
+    remembered_selections: set[str] | None,
+    custom_tab_names: dict[str, str] | None = None,
 ) -> bool:
     """Determine if a tab should be pre-checked based on remembered selections."""
     if remembered_selections is None:
         return category in ("layout", "worktree")
-    name = tab.get("name", os.path.basename(tab.get("dir", "")))
-    return name in remembered_selections or tab.get("dir") in remembered_selections
+    name = get_tab_display_name(tab, custom_tab_names)
+    return name in remembered_selections or get_tab_dir(tab) in remembered_selections
 
 
 def _build_category_checkboxes(
@@ -3202,8 +3290,8 @@ def _build_category_checkboxes(
     all_items = []
 
     for tab in items:
-        path = tab.get("dir", tab.get("path", ""))
-        name = _get_display_name(tab, custom_tab_names)
+        path = get_tab_dir(tab)
+        name = get_tab_display_name(tab, custom_tab_names)
         label = format_tab_label(path, name)
 
         tab_path = Path(path).expanduser()
@@ -3211,7 +3299,7 @@ def _build_category_checkboxes(
 
         checkboxes.append({
             "label": label,
-            "checked": _is_tab_selected(tab, category_key, remembered_selections),
+            "checked": _is_tab_selected(tab, category_key, remembered_selections, custom_tab_names),
             "icon": icon,
         })
         all_items.append({"label": label, "tab": tab, "category": category_key})
@@ -3939,31 +4027,21 @@ async def show_tab_customization(
             # Check if rename was requested
             if result == "RENAME_REQUESTED":
                 # Build items list with category tags for all inputs
+                # Use get_tab_display_name for consistent name resolution
                 items_to_rename = []
-                for tab in layout_tabs:
-                    items_to_rename.append({
-                        "dir": tab.get("dir", ""),
-                        "name": tab.get("name", os.path.basename(tab.get("dir", ""))),
-                        "category": "Layout Tabs"
-                    })
-                for wt in worktrees:
-                    items_to_rename.append({
-                        "dir": wt.get("dir", ""),
-                        "name": wt.get("name", ""),
-                        "category": "Git Worktrees"
-                    })
-                for repo in additional_repos:
-                    items_to_rename.append({
-                        "dir": repo.get("dir", ""),
-                        "name": repo.get("name", ""),
-                        "category": "Additional Repos"
-                    })
-                for folder in untracked_folders:
-                    items_to_rename.append({
-                        "dir": folder.get("dir", ""),
-                        "name": folder.get("name", ""),
-                        "category": "Untracked Folders"
-                    })
+                category_sources = [
+                    (layout_tabs, "Layout Tabs"),
+                    (worktrees, "Git Worktrees"),
+                    (additional_repos, "Additional Repos"),
+                    (untracked_folders, "Untracked Folders"),
+                ]
+                for source_list, category_name in category_sources:
+                    for tab in source_list:
+                        items_to_rename.append({
+                            "dir": get_tab_dir(tab),
+                            "name": get_tab_display_name(tab, custom_tab_names),
+                            "category": category_name,
+                        })
 
                 # Filter out items without paths
                 items_to_rename = [i for i in items_to_rename if i.get("dir")]
@@ -4086,7 +4164,7 @@ def show_tab_reorder_dialog(
         values = [str(n) for n in range(1, max_val + 1)]
         selectitems = []
         for i, tab in enumerate(current):
-            name = _get_display_name(tab, custom_tab_names)
+            name = get_tab_display_name(tab, custom_tab_names)
             selectitems.append({
                 "title": name,
                 "values": values,
@@ -4135,7 +4213,7 @@ def show_tab_reorder_dialog(
                 "Tab reorder preview",
                 operation="show_tab_reorder_dialog",
                 iteration=iteration,
-                order=[_get_display_name(t, custom_tab_names) for t in current],
+                order=[get_tab_display_name(t, custom_tab_names) for t in current],
             )
             continue
 
@@ -4145,7 +4223,7 @@ def show_tab_reorder_dialog(
                 "Tab order finalized",
                 operation="show_tab_reorder_dialog",
                 iterations=iteration,
-                final_order=[_get_display_name(t, custom_tab_names) for t in current],
+                final_order=[get_tab_display_name(t, custom_tab_names) for t in current],
             )
             return current
 
@@ -4167,7 +4245,7 @@ def _reorder_tabs_by_numbers(
     """Sort tabs by the numeric values from the reorder dialog output."""
     pairs = []
     for tab in tabs:
-        name = _get_display_name(tab, custom_tab_names)
+        name = get_tab_display_name(tab, custom_tab_names)
         raw = output.get(name, "999")
         # Handle both textfield ("3") and selectitems ({"selectedValue": "3"})
         if isinstance(raw, dict):
@@ -4424,8 +4502,7 @@ async def get_open_tab_directories(window) -> set[str]:
     """Return normalized directory paths of all sessions in the current window.
 
     Queries each session's ``path`` variable via the iTerm2 Python API.
-    Paths are resolved through ``os.path.realpath`` so symlinks and
-    trailing slashes are handled consistently.
+    Uses normalize_tab_path for consistent path comparison.
 
     Args:
         window: iTerm2 Window object (current terminal window).
@@ -4445,19 +4522,21 @@ async def get_open_tab_directories(window) -> set[str]:
                 )
                 continue
             if path:
-                normalized = os.path.realpath(path).rstrip("/")
-                open_dirs.add(normalized)
+                open_dirs.add(normalize_tab_path(path))
     return open_dirs
 
 
 def filter_already_open_tabs(
-    all_tabs: list[dict], open_dirs: set[str]
+    all_tabs: list[dict],
+    open_dirs: set[str],
+    custom_tab_names: dict[str, str] | None = None,
 ) -> tuple[list[dict], list[str]]:
     """Filter out tabs whose directories are already open.
 
     Args:
         all_tabs: List of tab config dicts (must have "dir" key).
         open_dirs: Set of normalized directory paths already open.
+        custom_tab_names: Optional mapping for display name resolution.
 
     Returns:
         Tuple of (tabs_to_create, skipped_tab_names).
@@ -4466,10 +4545,11 @@ def filter_already_open_tabs(
     tabs_skipped: list[str] = []
 
     for tab_config in all_tabs:
-        tab_dir = tab_config.get("dir", "")
-        expanded = os.path.realpath(os.path.expanduser(tab_dir)).rstrip("/")
-        if expanded in open_dirs:
-            tab_name = tab_config.get("name") or os.path.basename(expanded)
+        tab_dir = get_tab_dir(tab_config)
+        normalized = normalize_tab_path(tab_dir)
+        if normalized in open_dirs:
+            # Use centralized utility for consistent name resolution
+            tab_name = get_tab_display_name(tab_config, custom_tab_names)
             tabs_skipped.append(tab_name)
             logger.info(
                 "Tab skipped - already open",
@@ -4511,8 +4591,7 @@ async def reorder_window_tabs(
     # First, add newly created tabs (path variable may not be set yet)
     dir_to_tab: dict[str, object] = {}
     for dir_path, tab in created_tabs.items():
-        normalized = os.path.realpath(os.path.expanduser(dir_path)).rstrip("/")
-        dir_to_tab[normalized] = tab
+        dir_to_tab[normalize_tab_path(dir_path)] = tab
 
     # Then query existing tabs (already-open before this session)
     for tab in window.tabs:
@@ -4524,7 +4603,7 @@ async def reorder_window_tabs(
             except (iterm2.RPCException, AttributeError, TypeError):
                 continue
             if path:
-                normalized = os.path.realpath(path).rstrip("/")
+                normalized = normalize_tab_path(path)
                 if normalized not in dir_to_tab:
                     dir_to_tab[normalized] = tab
                 break  # Use first session's path per tab
@@ -4534,7 +4613,7 @@ async def reorder_window_tabs(
     used_tabs: set[str] = set()  # Track tab_ids to avoid duplicates
 
     for dir_path in desired_order:
-        normalized = os.path.realpath(os.path.expanduser(dir_path)).rstrip("/")
+        normalized = normalize_tab_path(dir_path)
         tab = dir_to_tab.get(normalized)
         if tab and tab.tab_id not in used_tabs:
             ordered_tabs.append(tab)
@@ -5079,6 +5158,9 @@ async def main(connection):
     # Detect Already-Open Tabs
     # =========================================================================
 
+    # Get custom tab names early - used by filter and display throughout
+    custom_tab_names = prefs.get("custom_tab_names", {})
+
     open_dirs = await get_open_tab_directories(window)
     if open_dirs:
         logger.info(
@@ -5088,7 +5170,9 @@ async def main(connection):
             count=len(open_dirs),
         )
 
-    tabs_to_create, tabs_skipped = filter_already_open_tabs(all_tabs, open_dirs)
+    tabs_to_create, tabs_skipped = filter_already_open_tabs(
+        all_tabs, open_dirs, custom_tab_names
+    )
     all_tabs = tabs_to_create
 
     # =========================================================================
@@ -5111,21 +5195,14 @@ async def main(connection):
     # Track created tabs for reordering (dir_path → Tab object)
     created_tabs: dict[str, object] = {}
 
-    # Get custom tab names for display
-    custom_tab_names = prefs.get("custom_tab_names", {})
-
     # Create all tabs in the specified order
     for idx, tab_config in enumerate(all_tabs):
-        tab_dir = tab_config["dir"]
-        # Priority: custom_tab_names > tab_config name > directory basename
-        tab_name = (
-            custom_tab_names.get(tab_dir)
-            or tab_config.get("name")
-            or os.path.basename(os.path.expanduser(tab_dir))
-        )
+        tab_dir = get_tab_dir(tab_config)
+        # Use centralized utility for consistent name resolution
+        tab_name = get_tab_display_name(tab_config, custom_tab_names)
 
         # Validate directory exists
-        expanded_dir = os.path.expanduser(tab_dir)
+        expanded_dir = expand_tab_path(tab_dir)
         if not os.path.isdir(expanded_dir):
             logger.warning(
                 "Tab skipped - directory not found",

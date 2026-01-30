@@ -41,6 +41,7 @@ MODULE_ORDER = [
     "scan_dirs.py",         # Scan directories management
     "setup_wizard.py",      # First-run and veteran wizards
     "tool_installer.py",    # Homebrew tool installation
+    "tab_utils.py",         # Tab utilities (display names, path normalization)
     "tab_customization.py", # Tab selection dialog
     "pane_setup.py",        # Pane creation and commands
     "tab_detection.py",     # Detect already-open tabs

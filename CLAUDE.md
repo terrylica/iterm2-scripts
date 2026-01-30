@@ -103,6 +103,7 @@ src/
 ├── scan_dirs.py         # Scan directories management
 ├── setup_wizard.py      # First-run and veteran wizards
 ├── tool_installer.py    # Homebrew tool installation
+├── tab_utils.py         # Tab utilities (display names, path normalization)
 ├── tab_customization.py # Tab selection + reorder dialogs
 ├── tab_detection.py     # Already-open tab detection + reordering
 ├── pane_setup.py        # Pane creation + command execution

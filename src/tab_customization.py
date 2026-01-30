@@ -8,12 +8,8 @@
 # =============================================================================
 # Shared Helpers
 # =============================================================================
-
-
-def _get_display_name(tab: dict, custom_tab_names: dict[str, str]) -> str:
-    """Get the display name for a tab, preferring custom name over default."""
-    path = tab.get("dir", "")
-    return custom_tab_names.get(path) or tab.get("name") or os.path.basename(path)
+# Note: get_tab_display_name() and related utilities are in tab_utils.py
+# to ensure consistent tab name resolution across the entire codebase.
 
 
 def _get_max_dialog_height(screen_percent: float = 0.90, fallback: int = 900) -> int:
@@ -28,13 +24,16 @@ def _get_max_dialog_height(screen_percent: float = 0.90, fallback: int = 900) ->
 
 
 def _is_tab_selected(
-    tab: dict, category: str, remembered_selections: set[str] | None
+    tab: dict,
+    category: str,
+    remembered_selections: set[str] | None,
+    custom_tab_names: dict[str, str] | None = None,
 ) -> bool:
     """Determine if a tab should be pre-checked based on remembered selections."""
     if remembered_selections is None:
         return category in ("layout", "worktree")
-    name = tab.get("name", os.path.basename(tab.get("dir", "")))
-    return name in remembered_selections or tab.get("dir") in remembered_selections
+    name = get_tab_display_name(tab, custom_tab_names)
+    return name in remembered_selections or get_tab_dir(tab) in remembered_selections
 
 
 def _build_category_checkboxes(
@@ -60,8 +59,8 @@ def _build_category_checkboxes(
     all_items = []
 
     for tab in items:
-        path = tab.get("dir", tab.get("path", ""))
-        name = _get_display_name(tab, custom_tab_names)
+        path = get_tab_dir(tab)
+        name = get_tab_display_name(tab, custom_tab_names)
         label = format_tab_label(path, name)
 
         tab_path = Path(path).expanduser()
@@ -69,7 +68,7 @@ def _build_category_checkboxes(
 
         checkboxes.append({
             "label": label,
-            "checked": _is_tab_selected(tab, category_key, remembered_selections),
+            "checked": _is_tab_selected(tab, category_key, remembered_selections, custom_tab_names),
             "icon": icon,
         })
         all_items.append({"label": label, "tab": tab, "category": category_key})
@@ -798,31 +797,21 @@ async def show_tab_customization(
             # Check if rename was requested
             if result == "RENAME_REQUESTED":
                 # Build items list with category tags for all inputs
+                # Use get_tab_display_name for consistent name resolution
                 items_to_rename = []
-                for tab in layout_tabs:
-                    items_to_rename.append({
-                        "dir": tab.get("dir", ""),
-                        "name": tab.get("name", os.path.basename(tab.get("dir", ""))),
-                        "category": "Layout Tabs"
-                    })
-                for wt in worktrees:
-                    items_to_rename.append({
-                        "dir": wt.get("dir", ""),
-                        "name": wt.get("name", ""),
-                        "category": "Git Worktrees"
-                    })
-                for repo in additional_repos:
-                    items_to_rename.append({
-                        "dir": repo.get("dir", ""),
-                        "name": repo.get("name", ""),
-                        "category": "Additional Repos"
-                    })
-                for folder in untracked_folders:
-                    items_to_rename.append({
-                        "dir": folder.get("dir", ""),
-                        "name": folder.get("name", ""),
-                        "category": "Untracked Folders"
-                    })
+                category_sources = [
+                    (layout_tabs, "Layout Tabs"),
+                    (worktrees, "Git Worktrees"),
+                    (additional_repos, "Additional Repos"),
+                    (untracked_folders, "Untracked Folders"),
+                ]
+                for source_list, category_name in category_sources:
+                    for tab in source_list:
+                        items_to_rename.append({
+                            "dir": get_tab_dir(tab),
+                            "name": get_tab_display_name(tab, custom_tab_names),
+                            "category": category_name,
+                        })
 
                 # Filter out items without paths
                 items_to_rename = [i for i in items_to_rename if i.get("dir")]
@@ -945,7 +934,7 @@ def show_tab_reorder_dialog(
         values = [str(n) for n in range(1, max_val + 1)]
         selectitems = []
         for i, tab in enumerate(current):
-            name = _get_display_name(tab, custom_tab_names)
+            name = get_tab_display_name(tab, custom_tab_names)
             selectitems.append({
                 "title": name,
                 "values": values,
@@ -994,7 +983,7 @@ def show_tab_reorder_dialog(
                 "Tab reorder preview",
                 operation="show_tab_reorder_dialog",
                 iteration=iteration,
-                order=[_get_display_name(t, custom_tab_names) for t in current],
+                order=[get_tab_display_name(t, custom_tab_names) for t in current],
             )
             continue
 
@@ -1004,7 +993,7 @@ def show_tab_reorder_dialog(
                 "Tab order finalized",
                 operation="show_tab_reorder_dialog",
                 iterations=iteration,
-                final_order=[_get_display_name(t, custom_tab_names) for t in current],
+                final_order=[get_tab_display_name(t, custom_tab_names) for t in current],
             )
             return current
 
@@ -1026,7 +1015,7 @@ def _reorder_tabs_by_numbers(
     """Sort tabs by the numeric values from the reorder dialog output."""
     pairs = []
     for tab in tabs:
-        name = _get_display_name(tab, custom_tab_names)
+        name = get_tab_display_name(tab, custom_tab_names)
         raw = output.get(name, "999")
         # Handle both textfield ("3") and selectitems ({"selectedValue": "3"})
         if isinstance(raw, dict):

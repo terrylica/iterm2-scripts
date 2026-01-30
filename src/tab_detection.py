@@ -11,8 +11,7 @@ async def get_open_tab_directories(window) -> set[str]:
     """Return normalized directory paths of all sessions in the current window.
 
     Queries each session's ``path`` variable via the iTerm2 Python API.
-    Paths are resolved through ``os.path.realpath`` so symlinks and
-    trailing slashes are handled consistently.
+    Uses normalize_tab_path for consistent path comparison.
 
     Args:
         window: iTerm2 Window object (current terminal window).
@@ -32,19 +31,21 @@ async def get_open_tab_directories(window) -> set[str]:
                 )
                 continue
             if path:
-                normalized = os.path.realpath(path).rstrip("/")
-                open_dirs.add(normalized)
+                open_dirs.add(normalize_tab_path(path))
     return open_dirs
 
 
 def filter_already_open_tabs(
-    all_tabs: list[dict], open_dirs: set[str]
+    all_tabs: list[dict],
+    open_dirs: set[str],
+    custom_tab_names: dict[str, str] | None = None,
 ) -> tuple[list[dict], list[str]]:
     """Filter out tabs whose directories are already open.
 
     Args:
         all_tabs: List of tab config dicts (must have "dir" key).
         open_dirs: Set of normalized directory paths already open.
+        custom_tab_names: Optional mapping for display name resolution.
 
     Returns:
         Tuple of (tabs_to_create, skipped_tab_names).
@@ -53,10 +54,11 @@ def filter_already_open_tabs(
     tabs_skipped: list[str] = []
 
     for tab_config in all_tabs:
-        tab_dir = tab_config.get("dir", "")
-        expanded = os.path.realpath(os.path.expanduser(tab_dir)).rstrip("/")
-        if expanded in open_dirs:
-            tab_name = tab_config.get("name") or os.path.basename(expanded)
+        tab_dir = get_tab_dir(tab_config)
+        normalized = normalize_tab_path(tab_dir)
+        if normalized in open_dirs:
+            # Use centralized utility for consistent name resolution
+            tab_name = get_tab_display_name(tab_config, custom_tab_names)
             tabs_skipped.append(tab_name)
             logger.info(
                 "Tab skipped - already open",
@@ -98,8 +100,7 @@ async def reorder_window_tabs(
     # First, add newly created tabs (path variable may not be set yet)
     dir_to_tab: dict[str, object] = {}
     for dir_path, tab in created_tabs.items():
-        normalized = os.path.realpath(os.path.expanduser(dir_path)).rstrip("/")
-        dir_to_tab[normalized] = tab
+        dir_to_tab[normalize_tab_path(dir_path)] = tab
 
     # Then query existing tabs (already-open before this session)
     for tab in window.tabs:
@@ -111,7 +112,7 @@ async def reorder_window_tabs(
             except (iterm2.RPCException, AttributeError, TypeError):
                 continue
             if path:
-                normalized = os.path.realpath(path).rstrip("/")
+                normalized = normalize_tab_path(path)
                 if normalized not in dir_to_tab:
                     dir_to_tab[normalized] = tab
                 break  # Use first session's path per tab
@@ -121,7 +122,7 @@ async def reorder_window_tabs(
     used_tabs: set[str] = set()  # Track tab_ids to avoid duplicates
 
     for dir_path in desired_order:
-        normalized = os.path.realpath(os.path.expanduser(dir_path)).rstrip("/")
+        normalized = normalize_tab_path(dir_path)
         tab = dir_to_tab.get(normalized)
         if tab and tab.tab_id not in used_tabs:
             ordered_tabs.append(tab)
