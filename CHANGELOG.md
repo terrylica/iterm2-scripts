@@ -1,3 +1,10 @@
+## [3.1.1](https://github.com/terrylica/iterm2-scripts/compare/v3.1.0...v3.1.1) (2026-01-30)
+
+
+### Bug Fixes
+
+* **tab-reorder:** track created tabs to enable correct reordering ([da3bcbe](https://github.com/terrylica/iterm2-scripts/commit/da3bcbe48ca641ce34869c4704b4c5df0c7cda19))
+
 # [3.1.0](https://github.com/terrylica/iterm2-scripts/compare/v3.0.3...v3.1.0) (2026-01-30)
 
 
