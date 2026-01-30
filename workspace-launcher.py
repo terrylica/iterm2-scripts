@@ -4489,7 +4489,11 @@ def filter_already_open_tabs(
     return tabs_to_create, tabs_skipped
 
 
-async def reorder_window_tabs(window, desired_order: list[str]) -> None:
+async def reorder_window_tabs(
+    window,
+    desired_order: list[str],
+    created_tabs: dict[str, object] | None = None,
+) -> None:
     """Reorder all tabs in a window to match the desired directory order.
 
     Uses ``window.async_set_tabs()`` to rearrange already-open tabs.
@@ -4498,10 +4502,22 @@ async def reorder_window_tabs(window, desired_order: list[str]) -> None:
     Args:
         window: iTerm2 Window object.
         desired_order: List of directory paths in desired tab order.
+        created_tabs: Optional mapping of dir_path → Tab object for newly
+            created tabs. Bypasses path query which may fail for fresh tabs.
     """
+    created_tabs = created_tabs or {}
+
     # Build map: normalized dir path → Tab object
+    # First, add newly created tabs (path variable may not be set yet)
     dir_to_tab: dict[str, object] = {}
+    for dir_path, tab in created_tabs.items():
+        normalized = os.path.realpath(os.path.expanduser(dir_path)).rstrip("/")
+        dir_to_tab[normalized] = tab
+
+    # Then query existing tabs (already-open before this session)
     for tab in window.tabs:
+        if tab.tab_id in {t.tab_id for t in created_tabs.values()}:
+            continue  # Already tracked via created_tabs
         for session in tab.sessions:
             try:
                 path = await session.async_get_variable("path")
@@ -5092,6 +5108,9 @@ async def main(connection):
     # the user's focused tab should not be overwritten.
     used_initial_tab = len(tabs_skipped) > 0
 
+    # Track created tabs for reordering (dir_path → Tab object)
+    created_tabs: dict[str, object] = {}
+
     # Create all tabs in the specified order
     for idx, tab_config in enumerate(all_tabs):
         # Use directory basename as default name if not specified
@@ -5127,7 +5146,7 @@ async def main(connection):
             tab_name=tab_name,
             tab_dir=tab_dir
         )
-        await create_tab_with_splits(
+        tab = await create_tab_with_splits(
             window,
             connection,
             tab_dir,
@@ -5135,11 +5154,14 @@ async def main(connection):
             config,
             is_first=(not used_initial_tab),
         )
+        # Track created tab for reordering
+        created_tabs[tab_dir] = tab
         used_initial_tab = True
 
     # Reorder all window tabs to match the finalized order
+    # Pass created_tabs to bypass path query for newly created tabs
     if prefs.get("last_tab_order"):
-        await reorder_window_tabs(window, prefs["last_tab_order"])
+        await reorder_window_tabs(window, prefs["last_tab_order"], created_tabs)
 
     # Save updated preferences with all selected tabs (including skipped ones
     # that were already open — they are still part of the workspace selection)

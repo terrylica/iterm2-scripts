@@ -76,7 +76,11 @@ def filter_already_open_tabs(
     return tabs_to_create, tabs_skipped
 
 
-async def reorder_window_tabs(window, desired_order: list[str]) -> None:
+async def reorder_window_tabs(
+    window,
+    desired_order: list[str],
+    created_tabs: dict[str, object] | None = None,
+) -> None:
     """Reorder all tabs in a window to match the desired directory order.
 
     Uses ``window.async_set_tabs()`` to rearrange already-open tabs.
@@ -85,10 +89,22 @@ async def reorder_window_tabs(window, desired_order: list[str]) -> None:
     Args:
         window: iTerm2 Window object.
         desired_order: List of directory paths in desired tab order.
+        created_tabs: Optional mapping of dir_path → Tab object for newly
+            created tabs. Bypasses path query which may fail for fresh tabs.
     """
+    created_tabs = created_tabs or {}
+
     # Build map: normalized dir path → Tab object
+    # First, add newly created tabs (path variable may not be set yet)
     dir_to_tab: dict[str, object] = {}
+    for dir_path, tab in created_tabs.items():
+        normalized = os.path.realpath(os.path.expanduser(dir_path)).rstrip("/")
+        dir_to_tab[normalized] = tab
+
+    # Then query existing tabs (already-open before this session)
     for tab in window.tabs:
+        if tab.tab_id in {t.tab_id for t in created_tabs.values()}:
+            continue  # Already tracked via created_tabs
         for session in tab.sessions:
             try:
                 path = await session.async_get_variable("path")
