@@ -12,11 +12,13 @@
 # to ensure consistent tab name resolution across the entire codebase.
 
 # Target width for header labels (dynamically padded)
-# 40 chars - balanced width that fits single line with 📌 emoji prefix
-HEADER_TARGET_WIDTH = 40
+# Level 1: 40 chars for main category headers
+# Level 2: 34 chars (6 shorter) for sub-headers
+HEADER_L1_WIDTH = 40
+HEADER_L2_WIDTH = 34
 
 
-def _make_header_label(text: str, char: str, target_width: int = HEADER_TARGET_WIDTH) -> str:
+def _make_header_label(text: str, char: str, target_width: int = HEADER_L1_WIDTH) -> str:
     """Create a centered header label with dynamic padding.
 
     Args:
@@ -143,8 +145,8 @@ def _build_grouped_category_checkboxes(
         # Add sub-header for this parent directory with double-line box drawing
         parent_name = Path(parent_path).name.upper()
         count = len(group_items)
-        # Use 🗂️ emoji on both sides + double-line ═ for Level 2
-        sub_header = f"🗂️ {_make_header_label(f'{parent_name}/ ({count})', '═')} 🗂️"
+        # Use 🗂️ emoji on both sides + double-line ═ for Level 2 (6 chars shorter than L1)
+        sub_header = f"🗂️ {_make_header_label(f'{parent_name}/ ({count})', '═', HEADER_L2_WIDTH)} 🗂️"
         checkboxes.append({
             "label": sub_header,
             "checked": False,
