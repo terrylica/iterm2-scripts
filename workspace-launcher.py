@@ -5313,14 +5313,13 @@ async def main(connection):
     # Track created tabs for reordering (dir_path → Tab object)
     created_tabs: dict[str, object] = {}
 
-    # Create all tabs in the specified order
+    # Validate all tabs first and filter out invalid ones
+    valid_tabs: list[tuple[dict, str, str]] = []  # (tab_config, tab_dir, tab_name)
     for idx, tab_config in enumerate(all_tabs):
         tab_dir = get_tab_dir(tab_config)
-        # Use centralized utility for consistent name resolution
         tab_name = get_tab_display_name(tab_config, custom_tab_names)
-
-        # Validate directory exists
         expanded_dir = expand_tab_path(tab_dir)
+
         if not os.path.isdir(expanded_dir):
             logger.warning(
                 "Tab skipped - directory not found",
@@ -5337,26 +5336,51 @@ async def main(connection):
                 context={"tab_name": tab_name, "tab_dir": tab_dir}
             ))
             continue
+        valid_tabs.append((tab_config, tab_dir, tab_name))
 
+    # Create first tab (reuses current tab if no tabs were skipped)
+    if valid_tabs and not used_initial_tab:
+        _, first_dir, first_name = valid_tabs[0]
         logger.info(
-            "Creating tab",
+            "Creating first tab (reusing current)",
             operation="main",
             trace_id=main_trace_id,
-            tab_index=idx + 1,
-            tab_name=tab_name,
-            tab_dir=tab_dir
+            tab_index=1,
+            tab_name=first_name,
+            tab_dir=first_dir
         )
-        tab = await create_tab_with_splits(
-            window,
-            connection,
-            tab_dir,
-            tab_name,
-            config,
-            is_first=(not used_initial_tab),
+        first_tab = await create_tab_with_splits(
+            window, connection, first_dir, first_name, config, is_first=True
         )
-        # Track created tab for reordering
-        created_tabs[tab_dir] = tab
-        used_initial_tab = True
+        created_tabs[first_dir] = first_tab
+        remaining_tabs = valid_tabs[1:]
+    else:
+        remaining_tabs = valid_tabs
+
+    # Create remaining tabs in PARALLEL using asyncio.gather()
+    if remaining_tabs:
+        logger.info(
+            f"Creating {len(remaining_tabs)} tabs in parallel",
+            operation="main",
+            trace_id=main_trace_id
+        )
+
+        async def create_single_tab(tab_info: tuple[dict, str, str]) -> tuple[str, object]:
+            """Create a single tab and return (dir, tab) tuple."""
+            _, tab_dir, tab_name = tab_info
+            tab = await create_tab_with_splits(
+                window, connection, tab_dir, tab_name, config, is_first=False
+            )
+            return (tab_dir, tab)
+
+        # Create all remaining tabs concurrently
+        results = await asyncio.gather(*[
+            create_single_tab(tab_info) for tab_info in remaining_tabs
+        ])
+
+        # Collect results into created_tabs dict
+        for tab_dir, tab in results:
+            created_tabs[tab_dir] = tab
 
     # Reorder all window tabs to match the finalized order
     # Pass created_tabs to bypass path query for newly created tabs
