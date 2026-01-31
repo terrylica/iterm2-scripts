@@ -116,13 +116,12 @@ def _build_grouped_category_checkboxes(
     all_items = []
 
     for parent_path, group_items in sorted_groups:
-        # Add sub-header for this parent directory with bold styling
+        # Add sub-header for this parent directory with triangle styling
         parent_name = Path(parent_path).name.upper()
         count = len(group_items)
-        # Use heavy box-drawing characters for prominent demarcation
-        # ━━━━━━━━━━ PARENT_NAME (count) ━━━━━━━━━━
+        # Use triangle characters (▸ ◂) for Level 2 visual distinction
         checkboxes.append({
-            "label": f"━━━━━━━━  {parent_name}/ ({count})  ━━━━━━━━",
+            "label": f"▸▸▸▸▸▸  {parent_name}/ ({count})  ◂◂◂◂◂◂",
             "checked": False,
             "disabled": True,
             "icon": "SF=folder.fill.badge.gearshape",
@@ -516,12 +515,12 @@ def show_tab_customization_swiftdialog(
     remembered_selections = set(last_tab_selections) if last_tab_selections else None
 
     # Build category checkboxes using shared helpers
-    # Level 1 headers use double-line box drawing (═) for maximum prominence
+    # Level 1 headers use block characters (▓) for dramatic visual impact
     # Layout tabs and worktrees use flat list
     flat_categories = [
-        (layout_tabs, "layout", "══════════════  LAYOUT TABS  ══════════════",
+        (layout_tabs, "layout", "▓▓▓▓▓▓▓▓▓▓▓▓  LAYOUT TABS  ▓▓▓▓▓▓▓▓▓▓▓▓",
          CATEGORY_ICONS["header_layout"], CATEGORY_ICONS["layout_tab"]),
-        (worktrees, "worktree", "══════════════  GIT WORKTREES  ══════════════",
+        (worktrees, "worktree", "▓▓▓▓▓▓▓▓▓▓▓▓  GIT WORKTREES  ▓▓▓▓▓▓▓▓▓▓▓▓",
          CATEGORY_ICONS["header_worktree"], CATEGORY_ICONS["git_worktree"]),
     ]
     for items, cat_key, header, header_icon, item_icon in flat_categories:
@@ -535,7 +534,7 @@ def show_tab_customization_swiftdialog(
     # Additional repos grouped by parent directory (alphabetically: eon, fork-tools, own)
     # Level 1 header, Level 2 sub-headers handled inside _build_grouped_category_checkboxes
     repo_checkboxes, repo_items = _build_grouped_category_checkboxes(
-        additional_repos, "discovered", "══════════════  ADDITIONAL REPOS  ══════════════",
+        additional_repos, "discovered", "▓▓▓▓▓▓▓▓▓▓▓▓  ADDITIONAL REPOS  ▓▓▓▓▓▓▓▓▓▓▓▓",
         CATEGORY_ICONS["header_repo"], CATEGORY_ICONS["additional_repo"],
         custom_tab_names, remembered_selections,
     )
@@ -544,7 +543,7 @@ def show_tab_customization_swiftdialog(
 
     # Untracked folders use flat list
     untracked_checkboxes, untracked_items = _build_category_checkboxes(
-        untracked_folders, "untracked", "══════════════  UNTRACKED FOLDERS  ══════════════",
+        untracked_folders, "untracked", "▓▓▓▓▓▓▓▓▓▓▓▓  UNTRACKED FOLDERS  ▓▓▓▓▓▓▓▓▓▓▓▓",
         CATEGORY_ICONS["header_untracked"], CATEGORY_ICONS["untracked"],
         custom_tab_names, remembered_selections,
     )
