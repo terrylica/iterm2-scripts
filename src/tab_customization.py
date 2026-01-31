@@ -11,6 +11,29 @@
 # Note: get_tab_display_name() and related utilities are in tab_utils.py
 # to ensure consistent tab name resolution across the entire codebase.
 
+# Target width for header labels (dynamically padded)
+HEADER_TARGET_WIDTH = 65
+
+
+def _make_header_label(text: str, char: str, target_width: int = HEADER_TARGET_WIDTH) -> str:
+    """Create a centered header label with dynamic padding.
+
+    Args:
+        text: The header text (e.g., "LAYOUT TABS", "EON/ (34)")
+        char: The padding character (e.g., "▓" for L1, "═" for L2)
+        target_width: Total target width for the header
+
+    Returns:
+        Centered header string padded to target width.
+    """
+    content = f"  {text}  "
+    available = target_width - len(content)
+    if available <= 0:
+        return content
+    left_pad = available // 2
+    right_pad = available - left_pad
+    return char * left_pad + content + char * right_pad
+
 
 def _get_max_dialog_height(screen_percent: float = 0.90, fallback: int = 900) -> int:
     """Get maximum dialog height as a percentage of screen height."""
@@ -116,12 +139,13 @@ def _build_grouped_category_checkboxes(
     all_items = []
 
     for parent_path, group_items in sorted_groups:
-        # Add sub-header for this parent directory with triangle styling
+        # Add sub-header for this parent directory with double-line box drawing
         parent_name = Path(parent_path).name.upper()
         count = len(group_items)
-        # Use triangle characters (▸ ◂) for Level 2 visual distinction
+        # Use double-line ═ for Level 2 with dynamic padding to target width
+        sub_header = _make_header_label(f"{parent_name}/ ({count})", "═")
         checkboxes.append({
-            "label": f"▸▸▸▸▸▸  {parent_name}/ ({count})  ◂◂◂◂◂◂",
+            "label": sub_header,
             "checked": False,
             "disabled": True,
             "icon": "SF=folder.fill.badge.gearshape",
@@ -515,12 +539,12 @@ def show_tab_customization_swiftdialog(
     remembered_selections = set(last_tab_selections) if last_tab_selections else None
 
     # Build category checkboxes using shared helpers
-    # Level 1 headers use block characters (▓) for dramatic visual impact
+    # Level 1 headers use block characters (▓) with dynamic padding to 65 chars
     # Layout tabs and worktrees use flat list
     flat_categories = [
-        (layout_tabs, "layout", "▓▓▓▓▓▓▓▓▓▓▓▓  LAYOUT TABS  ▓▓▓▓▓▓▓▓▓▓▓▓",
+        (layout_tabs, "layout", _make_header_label("LAYOUT TABS", "▓"),
          CATEGORY_ICONS["header_layout"], CATEGORY_ICONS["layout_tab"]),
-        (worktrees, "worktree", "▓▓▓▓▓▓▓▓▓▓▓▓  GIT WORKTREES  ▓▓▓▓▓▓▓▓▓▓▓▓",
+        (worktrees, "worktree", _make_header_label("GIT WORKTREES", "▓"),
          CATEGORY_ICONS["header_worktree"], CATEGORY_ICONS["git_worktree"]),
     ]
     for items, cat_key, header, header_icon, item_icon in flat_categories:
@@ -534,7 +558,7 @@ def show_tab_customization_swiftdialog(
     # Additional repos grouped by parent directory (alphabetically: eon, fork-tools, own)
     # Level 1 header, Level 2 sub-headers handled inside _build_grouped_category_checkboxes
     repo_checkboxes, repo_items = _build_grouped_category_checkboxes(
-        additional_repos, "discovered", "▓▓▓▓▓▓▓▓▓▓▓▓  ADDITIONAL REPOS  ▓▓▓▓▓▓▓▓▓▓▓▓",
+        additional_repos, "discovered", _make_header_label("ADDITIONAL REPOS", "▓"),
         CATEGORY_ICONS["header_repo"], CATEGORY_ICONS["additional_repo"],
         custom_tab_names, remembered_selections,
     )
@@ -543,7 +567,7 @@ def show_tab_customization_swiftdialog(
 
     # Untracked folders use flat list
     untracked_checkboxes, untracked_items = _build_category_checkboxes(
-        untracked_folders, "untracked", "▓▓▓▓▓▓▓▓▓▓▓▓  UNTRACKED FOLDERS  ▓▓▓▓▓▓▓▓▓▓▓▓",
+        untracked_folders, "untracked", _make_header_label("UNTRACKED FOLDERS", "▓"),
         CATEGORY_ICONS["header_untracked"], CATEGORY_ICONS["untracked"],
         custom_tab_names, remembered_selections,
     )
