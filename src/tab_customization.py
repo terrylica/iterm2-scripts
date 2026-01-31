@@ -143,8 +143,8 @@ def _build_grouped_category_checkboxes(
         # Add sub-header for this parent directory with double-line box drawing
         parent_name = Path(parent_path).name.upper()
         count = len(group_items)
-        # Use double-line ═ for Level 2 with dynamic padding to target width
-        sub_header = _make_header_label(f"{parent_name}/ ({count})", "═")
+        # Use 🗂️ emoji on both sides + double-line ═ for Level 2
+        sub_header = f"🗂️ {_make_header_label(f'{parent_name}/ ({count})', '═')} 🗂️"
         checkboxes.append({
             "label": sub_header,
             "checked": False,
