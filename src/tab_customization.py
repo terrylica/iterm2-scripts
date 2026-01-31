@@ -516,11 +516,12 @@ def show_tab_customization_swiftdialog(
     remembered_selections = set(last_tab_selections) if last_tab_selections else None
 
     # Build category checkboxes using shared helpers
+    # Level 1 headers use double-line box drawing (═) for maximum prominence
     # Layout tabs and worktrees use flat list
     flat_categories = [
-        (layout_tabs, "layout", "—— Layout Tabs ——",
+        (layout_tabs, "layout", "══════════════  LAYOUT TABS  ══════════════",
          CATEGORY_ICONS["header_layout"], CATEGORY_ICONS["layout_tab"]),
-        (worktrees, "worktree", "—— Git Worktrees ——",
+        (worktrees, "worktree", "══════════════  GIT WORKTREES  ══════════════",
          CATEGORY_ICONS["header_worktree"], CATEGORY_ICONS["git_worktree"]),
     ]
     for items, cat_key, header, header_icon, item_icon in flat_categories:
@@ -532,8 +533,9 @@ def show_tab_customization_swiftdialog(
         all_items.extend(cat_items)
 
     # Additional repos grouped by parent directory (alphabetically: eon, fork-tools, own)
+    # Level 1 header, Level 2 sub-headers handled inside _build_grouped_category_checkboxes
     repo_checkboxes, repo_items = _build_grouped_category_checkboxes(
-        additional_repos, "discovered", "—— Additional Repos ——",
+        additional_repos, "discovered", "══════════════  ADDITIONAL REPOS  ══════════════",
         CATEGORY_ICONS["header_repo"], CATEGORY_ICONS["additional_repo"],
         custom_tab_names, remembered_selections,
     )
@@ -542,7 +544,7 @@ def show_tab_customization_swiftdialog(
 
     # Untracked folders use flat list
     untracked_checkboxes, untracked_items = _build_category_checkboxes(
-        untracked_folders, "untracked", "—— Untracked Folders ——",
+        untracked_folders, "untracked", "══════════════  UNTRACKED FOLDERS  ══════════════",
         CATEGORY_ICONS["header_untracked"], CATEGORY_ICONS["untracked"],
         custom_tab_names, remembered_selections,
     )
