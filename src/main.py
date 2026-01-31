@@ -332,11 +332,24 @@ async def main(connection):
                 worktrees=[{"name": wt["name"], "dir": wt["dir"]} for wt in legacy_worktrees]
             )
 
-        # Universal worktree discovery (scans all git repos from configured directories)
+        # Universal discovery (single filesystem pass for repos + untracked)
         layout_dirs = {Path(tab["dir"]).expanduser() for tab in tabs}
         scan_directories = get_enabled_scan_directories(prefs)
-        all_git_repos = discover_git_repos(scan_directories=scan_directories, exclude_dirs=set())
+
+        # Single-pass discovery: git repos and untracked folders together
+        all_git_repos, untracked_folders = discover_all_directories(
+            scan_directories=scan_directories,
+            exclude_dirs=set()
+        )
         additional_repos = [r for r in all_git_repos if Path(r["dir"]).expanduser() not in layout_dirs]
+
+        # Filter untracked folders to exclude layout directories
+        untracked_folders = [
+            f for f in untracked_folders
+            if Path(f["dir"]).expanduser() not in layout_dirs
+        ]
+
+        # Discover worktrees from git repos
         universal_worktrees = discover_all_worktrees(all_git_repos)
 
         if universal_worktrees:
@@ -348,11 +361,6 @@ async def main(connection):
                 worktrees=[{"name": wt["name"], "dir": wt["dir"]} for wt in universal_worktrees]
             )
 
-        # Discover untracked folders (directories without .git)
-        untracked_folders = discover_untracked_folders(
-            scan_directories=scan_directories,
-            exclude_dirs=layout_dirs
-        )
         if untracked_folders:
             logger.info(
                 "Untracked folders discovered",

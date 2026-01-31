@@ -1502,12 +1502,98 @@ def get_enabled_scan_directories(prefs: dict) -> list[Path]:
     return enabled_dirs
 
 
+def discover_all_directories(
+    scan_directories: list[Path] | None = None,
+    exclude_dirs: set[Path] | None = None
+) -> tuple[list[dict], list[dict]]:
+    """
+    Single-pass discovery of git repos AND untracked folders.
+
+    Performance optimization: iterates filesystem once instead of twice.
+
+    Args:
+        scan_directories: List of directories to scan (from preferences)
+        exclude_dirs: Set of paths to exclude (optional)
+
+    Returns:
+        Tuple of (git_repos, untracked_folders) - both as list of dicts
+    """
+    start_time = time.perf_counter()
+
+    if scan_directories is None:
+        scan_directories = []
+    if exclude_dirs is None:
+        exclude_dirs = set()
+
+    git_repos = []
+    untracked = []
+    op_trace_id = str(uuid4())
+
+    logger.debug(
+        "Starting single-pass directory discovery",
+        operation="discover_all_directories",
+        status="started",
+        trace_id=op_trace_id,
+        discovery_dirs=[str(d) for d in scan_directories]
+    )
+
+    for base_dir in scan_directories:
+        if not base_dir.exists():
+            continue
+
+        for child in base_dir.iterdir():
+            if not child.is_dir():
+                continue
+            if child in exclude_dirs:
+                continue
+            # Skip hidden directories for untracked (but not for git repos)
+            is_hidden = child.name.startswith(".")
+
+            git_path = child / ".git"
+            if git_path.exists():
+                # Has .git - check if it's a repo (directory) or worktree (file)
+                if git_path.is_dir():
+                    # Real git repository
+                    git_repos.append({
+                        "name": child.name,
+                        "dir": str(child)
+                    })
+                # else: worktree (.git is file) - skip, discovered separately
+            elif not is_hidden:
+                # No .git and not hidden - untracked folder
+                untracked.append({
+                    "name": child.name,
+                    "dir": str(child)
+                })
+
+    duration_ms = int((time.perf_counter() - start_time) * 1000)
+    logger.debug(
+        "Single-pass discovery complete",
+        operation="discover_all_directories",
+        status="success",
+        trace_id=op_trace_id,
+        metrics={
+            "repos_found": len(git_repos),
+            "untracked_found": len(untracked),
+            "duration_ms": duration_ms
+        }
+    )
+
+    return (
+        sorted(git_repos, key=lambda x: x["name"]),
+        sorted(untracked, key=lambda x: x["name"])
+    )
+
+
 def discover_git_repos(
     scan_directories: list[Path] | None = None,
     exclude_dirs: set[Path] | None = None
 ) -> list[dict]:
     """
     Find git repositories in discovery directories.
+
+    Note: For better performance, use discover_all_directories() which does
+    a single filesystem pass for both repos and untracked folders.
 
     Args:
         scan_directories: List of directories to scan (from preferences)
@@ -1516,65 +1602,8 @@ def discover_git_repos(
     Returns:
         List of dicts: {"name": "repo-name", "dir": "/path/to/repo"}
     """
-    start_time = time.perf_counter()
-
-    # Use empty list if not specified (portability - no hardcoded paths)
-    if scan_directories is None:
-        scan_directories = []
-
-    if exclude_dirs is None:
-        exclude_dirs = set()
-
-    repos = []
-    op_trace_id = str(uuid4())
-
-    logger.debug(
-        "Starting git repo discovery",
-        operation="discover_git_repos",
-        status="started",
-        trace_id=op_trace_id,
-        discovery_dirs=[str(d) for d in scan_directories]
-    )
-
-    for base_dir in scan_directories:
-        if not base_dir.exists():
-            logger.debug(
-                "Discovery directory does not exist",
-                operation="discover_git_repos",
-                trace_id=op_trace_id,
-                directory=str(base_dir)
-            )
-            continue
-
-        for child in base_dir.iterdir():
-            if not child.is_dir():
-                continue
-            if child in exclude_dirs:
-                continue
-
-            git_path = child / ".git"
-            if not git_path.exists():
-                continue
-            # Skip git worktrees - they have .git as a file, not directory
-            # Worktrees are discovered separately by discover_all_worktrees()
-            if not git_path.is_dir():
-                continue
-
-            repos.append({
-                "name": child.name,
-                "dir": str(child)
-            })
-
-    duration_ms = int((time.perf_counter() - start_time) * 1000)
-    logger.debug(
-        "Git repo discovery complete",
-        operation="discover_git_repos",
-        status="success",
-        trace_id=op_trace_id,
-        metrics={"repos_found": len(repos), "duration_ms": duration_ms}
-    )
-
-    return sorted(repos, key=lambda x: x["name"])
+    repos, _ = discover_all_directories(scan_directories, exclude_dirs)
+    return repos
 
 
 def discover_untracked_folders(
@@ -1584,8 +1613,8 @@ def discover_untracked_folders(
     """
     Find directories that are NOT git repositories (untracked folders).
 
-    These are directories that exist but don't have a .git folder - potentially
-    new projects not yet initialized with git.
+    Note: For better performance, use discover_all_directories() which does
+    a single filesystem pass for both repos and untracked folders.
 
     Args:
         scan_directories: List of directories to scan (from preferences)
@@ -1594,59 +1623,8 @@ def discover_untracked_folders(
     Returns:
         List of dicts: {"name": "folder-name", "dir": "/path/to/folder"}
     """
-    start_time = time.perf_counter()
-
-    # Use empty list if not specified (portability - no hardcoded paths)
-    if scan_directories is None:
-        scan_directories = []
-
-    if exclude_dirs is None:
-        exclude_dirs = set()
-
-    folders = []
-    op_trace_id = str(uuid4())
-
-    logger.debug(
-        "Starting untracked folder discovery",
-        operation="discover_untracked_folders",
-        status="started",
-        trace_id=op_trace_id,
-        discovery_dirs=[str(d) for d in scan_directories]
-    )
-
-    for base_dir in scan_directories:
-        if not base_dir.exists():
-            continue
-
-        for child in base_dir.iterdir():
-            if not child.is_dir():
-                continue
-            if child in exclude_dirs:
-                continue
-            # Skip hidden directories
-            if child.name.startswith("."):
-                continue
-
-            git_path = child / ".git"
-            # Only include if .git does NOT exist (not a repo, not a worktree)
-            if git_path.exists():
-                continue
-
-            folders.append({
-                "name": child.name,
-                "dir": str(child)
-            })
-
-    duration_ms = int((time.perf_counter() - start_time) * 1000)
-    logger.debug(
-        "Untracked folder discovery complete",
-        operation="discover_untracked_folders",
-        status="success",
-        trace_id=op_trace_id,
-        metrics={"folders_found": len(folders), "duration_ms": duration_ms}
-    )
-
-    return sorted(folders, key=lambda x: x["name"])
+    _, untracked = discover_all_directories(scan_directories, exclude_dirs)
+    return untracked
 
 
 def discover_all_worktrees(git_repos: list[dict]) -> list[dict]:
@@ -5094,11 +5072,24 @@ async def main(connection):
                 worktrees=[{"name": wt["name"], "dir": wt["dir"]} for wt in legacy_worktrees]
             )
 
-        # Universal worktree discovery (scans all git repos from configured directories)
+        # Universal discovery (single filesystem pass for repos + untracked)
         layout_dirs = {Path(tab["dir"]).expanduser() for tab in tabs}
         scan_directories = get_enabled_scan_directories(prefs)
-        all_git_repos = discover_git_repos(scan_directories=scan_directories, exclude_dirs=set())
+
+        # Single-pass discovery: git repos and untracked folders together
+        all_git_repos, untracked_folders = discover_all_directories(
+            scan_directories=scan_directories,
+            exclude_dirs=set()
+        )
         additional_repos = [r for r in all_git_repos if Path(r["dir"]).expanduser() not in layout_dirs]
+
+        # Filter untracked folders to exclude layout directories
+        untracked_folders = [
+            f for f in untracked_folders
+            if Path(f["dir"]).expanduser() not in layout_dirs
+        ]
+
+        # Discover worktrees from git repos
         universal_worktrees = discover_all_worktrees(all_git_repos)
 
         if universal_worktrees:
@@ -5110,11 +5101,6 @@ async def main(connection):
                 worktrees=[{"name": wt["name"], "dir": wt["dir"]} for wt in universal_worktrees]
             )
 
-        # Discover untracked folders (directories without .git)
-        untracked_folders = discover_untracked_folders(
-            scan_directories=scan_directories,
-            exclude_dirs=layout_dirs
-        )
         if untracked_folders:
             logger.info(
                 "Untracked folders discovered",
