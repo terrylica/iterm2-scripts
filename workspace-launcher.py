@@ -1627,11 +1627,83 @@ def discover_untracked_folders(
     return untracked
 
 
+def _discover_worktrees_for_repo(repo: dict) -> list[dict]:
+    """
+    Discover worktrees for a single git repository.
+
+    Internal helper for parallel execution.
+
+    Args:
+        repo: Dict with "name" and "dir" keys
+
+    Returns:
+        List of worktree dicts for this repo (may be empty)
+    """
+    repo_path = Path(repo["dir"]).expanduser()
+    if not repo_path.exists():
+        return []
+
+    try:
+        result = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5  # Reduced timeout for parallel execution
+        )
+
+        worktrees = []
+        current_worktree = {}
+        is_prunable = False
+
+        for line in result.stdout.split("\n"):
+            if line.startswith("worktree "):
+                if current_worktree and current_worktree.get("name") and not is_prunable:
+                    worktrees.append(current_worktree)
+                current_worktree = {}
+                is_prunable = False
+
+                wt_path = Path(line[9:])
+                if wt_path.resolve() == repo_path.resolve():
+                    current_worktree = {}
+                    continue
+                if not wt_path.is_dir():
+                    current_worktree = {}
+                    continue
+                current_worktree = {
+                    "dir": str(wt_path),
+                    "parent": repo["name"]
+                }
+            elif line.startswith("branch "):
+                branch = line.split("/")[-1]
+                if current_worktree:
+                    abbrev = repo["name"][:2].upper()
+                    current_worktree["name"] = f"{abbrev}.wt-{branch}"
+            elif line == "detached":
+                if current_worktree:
+                    abbrev = repo["name"][:2].upper()
+                    dir_name = Path(current_worktree["dir"]).name
+                    current_worktree["name"] = f"{abbrev}.wt-{dir_name}"
+                    current_worktree["detached"] = True
+            elif line.startswith("prunable"):
+                is_prunable = True
+
+        if current_worktree and current_worktree.get("name") and not is_prunable:
+            worktrees.append(current_worktree)
+
+        return worktrees
+
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return []
+
+
 def discover_all_worktrees(git_repos: list[dict]) -> list[dict]:
     """
-    Discover git worktrees from ALL git repositories.
+    Discover git worktrees from ALL git repositories in PARALLEL.
 
-    Scans each git repo and returns any worktrees found (excluding main worktree).
+    Uses ThreadPoolExecutor to run git worktree list concurrently across
+    all repos, significantly speeding up discovery for large repo counts.
 
     Args:
         git_repos: List of dicts with "name" and "dir" keys (from discover_git_repos)
@@ -1639,109 +1711,40 @@ def discover_all_worktrees(git_repos: list[dict]) -> list[dict]:
     Returns:
         List of dicts: {"name": "repo.wt-branch", "dir": "/path/to/worktree", "parent": "repo-name"}
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     start_time = time.perf_counter()
     discovered = []
     op_trace_id = str(uuid4())
 
     logger.debug(
-        "Starting universal worktree discovery",
+        "Starting parallel worktree discovery",
         operation="discover_all_worktrees",
         status="started",
         trace_id=op_trace_id,
         metrics={"repos_to_scan": len(git_repos)}
     )
 
-    for repo in git_repos:
-        repo_path = Path(repo["dir"]).expanduser()
-        if not repo_path.exists():
-            logger.debug(
-                "Skipping non-existent repo path",
-                operation="discover_all_worktrees",
-                trace_id=op_trace_id,
-                repo=repo["name"],
-                path=str(repo_path)
-            )
-            continue
+    # Run git worktree list in parallel across all repos
+    # Use max 16 workers to avoid overwhelming the system
+    max_workers = min(16, len(git_repos)) if git_repos else 1
 
-        try:
-            result = subprocess.run(
-                ["git", "worktree", "list", "--porcelain"],
-                cwd=repo_path,
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=10  # Prevent hanging on slow filesystems
-            )
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_discover_worktrees_for_repo, repo): repo for repo in git_repos}
 
-            # Parse porcelain output
-            # Format: worktree /path\nHEAD sha\nbranch refs/heads/name\n\n
-            # OR for detached: worktree /path\nHEAD sha\ndetached\n\n
-            current_worktree = {}
-            is_prunable = False
-
-            for line in result.stdout.split("\n"):
-                if line.startswith("worktree "):
-                    # Save previous worktree if valid
-                    if current_worktree and current_worktree.get("name") and not is_prunable:
-                        discovered.append(current_worktree)
-                    # Reset for new worktree
-                    current_worktree = {}
-                    is_prunable = False
-
-                    wt_path = Path(line[9:])  # Remove "worktree " prefix
-                    # Skip main worktree (same as repo path)
-                    if wt_path.resolve() == repo_path.resolve():
-                        current_worktree = {}  # Reset, don't save main
-                        continue
-                    # Skip if directory doesn't exist
-                    if not wt_path.is_dir():
-                        current_worktree = {}
-                        continue
-                    current_worktree = {
-                        "dir": str(wt_path),
-                        "parent": repo["name"]
-                    }
-                elif line.startswith("branch "):
-                    branch = line.split("/")[-1]  # refs/heads/feature -> feature
-                    if current_worktree:
-                        # Name format: RepoAbbrev.wt-branch
-                        abbrev = repo["name"][:2].upper()
-                        current_worktree["name"] = f"{abbrev}.wt-{branch}"
-                elif line == "detached":
-                    # Handle detached HEAD worktrees
-                    if current_worktree:
-                        abbrev = repo["name"][:2].upper()
-                        # Use directory name for detached worktrees
-                        dir_name = Path(current_worktree["dir"]).name
-                        current_worktree["name"] = f"{abbrev}.wt-{dir_name}"
-                        current_worktree["detached"] = True
-                elif line.startswith("prunable"):
-                    # Skip prunable worktrees (missing directory)
-                    is_prunable = True
-
-            # Don't forget last worktree
-            if current_worktree and current_worktree.get("name") and not is_prunable:
-                discovered.append(current_worktree)
-
-        except subprocess.CalledProcessError as e:
-            logger.warning(
-                "Failed to list worktrees for repo",
-                operation="discover_all_worktrees",
-                status="failed",
-                trace_id=op_trace_id,
-                repo=repo["name"],
-                error=str(e.stderr) if e.stderr else "unknown"
-            )
-            continue
-        except subprocess.TimeoutExpired:
-            logger.warning(
-                "Timeout listing worktrees for repo",
-                operation="discover_all_worktrees",
-                status="timeout",
-                trace_id=op_trace_id,
-                repo=repo["name"]
-            )
-            continue
+        for future in as_completed(futures):
+            try:
+                worktrees = future.result()
+                discovered.extend(worktrees)
+            except (OSError, subprocess.SubprocessError, ValueError) as e:
+                repo = futures[future]
+                logger.warning(
+                    "Failed to discover worktrees",
+                    operation="discover_all_worktrees",
+                    trace_id=op_trace_id,
+                    repo=repo["name"],
+                    error=str(e)
+                )
 
     # Deduplicate by directory path (same worktree can be found from multiple repos)
     seen_dirs = set()
@@ -1754,7 +1757,7 @@ def discover_all_worktrees(git_repos: list[dict]) -> list[dict]:
 
     duration_ms = int((time.perf_counter() - start_time) * 1000)
     logger.debug(
-        "Universal worktree discovery complete",
+        "Parallel worktree discovery complete",
         operation="discover_all_worktrees",
         status="success",
         trace_id=op_trace_id,
