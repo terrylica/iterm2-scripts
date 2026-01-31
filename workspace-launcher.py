@@ -3243,8 +3243,8 @@ def get_tab_dir(tab: dict) -> str:
 # to ensure consistent tab name resolution across the entire codebase.
 
 # Target width for header labels (dynamically padded)
-# 37 chars fits longest header (UNTRACKED FOLDERS) with 8-char padding each side
-HEADER_TARGET_WIDTH = 37
+# 50 chars provides good visual balance - Level 2 (═) renders narrower than Level 1 (▓)
+HEADER_TARGET_WIDTH = 50
 
 
 def _make_header_label(text: str, char: str, target_width: int = HEADER_TARGET_WIDTH) -> str:
