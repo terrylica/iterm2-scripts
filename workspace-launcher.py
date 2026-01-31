@@ -3301,13 +3301,10 @@ def _build_category_checkboxes(
         name = get_tab_display_name(tab, custom_tab_names)
         label = format_tab_label(path, name)
 
-        tab_path = Path(path).expanduser()
-        icon = item_icon if tab_path.exists() else CATEGORY_ICONS["missing_path"]
-
+        # Skip .exists() check and icons for individual items - faster rendering
         checkboxes.append({
             "label": label,
             "checked": _is_tab_selected(tab, category_key, remembered_selections, custom_tab_names),
-            "icon": icon,
         })
         all_items.append({"label": label, "tab": tab, "category": category_key})
 
@@ -3374,13 +3371,10 @@ def _build_grouped_category_checkboxes(
             name = get_tab_display_name(tab, custom_tab_names)
             label = format_tab_label(path, name)
 
-            tab_path = Path(path).expanduser()
-            icon = item_icon if tab_path.exists() else CATEGORY_ICONS["missing_path"]
-
+            # Skip .exists() check and icons for individual items - faster rendering
             checkboxes.append({
                 "label": label,
                 "checked": _is_tab_selected(tab, category_key, remembered_selections, custom_tab_names),
-                "icon": icon,
             })
             all_items.append({"label": label, "tab": tab, "category": category_key})
 
